@@ -15,8 +15,6 @@ snakemake = ">=8.0"
 snakemake-executor-plugin-slurm = "*"
 
 tcsh = "*"
-nco = "*"
-netcdf4 ="*"
 
 [tasks]
 dry-run   = "snakemake --dry-run --profile"
@@ -26,3 +24,5 @@ run-local = "snakemake"
 [pypi-dependencies]
 jinja2-shell = ">=0.1.4, <0.2"
 jinja2-cli = ">=1.0.1, <2"
+cdsapi = "*"
+

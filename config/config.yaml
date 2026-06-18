@@ -9,22 +9,22 @@
 runs:
   - year: 2000
     domain: "EUR"
-  - year: 2005
-    domain: "EUR"
-  - year: 2006
-    domain: "EUR"
-  - year: 2007
-    domain: "EUR"
+  # - year: 2005
+  #   domain: "EUR"
+  # - year: 2006
+  #   domain: "EUR"
+  # - year: 2007
+  #   domain: "EUR"
 
 # Directories. Use absolute paths.
-grib_basedir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/data/ERA5"
-run_basedir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/run"
-wps_install_dir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/eb/easybuild/software/WPS/4.6.0-foss-2024a-dmpar/WPS-4.6.0/"
-geo_em_dir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/data/geo_em"
+grib_basedir: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/data/ERA5"
+run_dir: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/run/{domain}/{year}"
+wps_install_dir: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/eb/easybuild/software/WPS/4.6.0-foss-2024a-dmpar/WPS-4.6.0/"
+geo_em_dir: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/data/geo_em"
 
 # Templates
-namelist_wps: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/templates/namelist.wps"
-namelist_input: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/templates/namelist.input"
+namelist_wps: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/config/templates/{domain}/namelist.wps"
+namelist_input: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/config/templates/{domain}/namelist.input"
 
 # Others
 Vtable: "Vtable.ERA-interim.pl"

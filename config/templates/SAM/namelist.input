@@ -1,11 +1,11 @@
 &time_control
- start_year                      	= 2000, 2000, 2000,
+ start_year                      	= {{start_year}}, {{start_year}}, {{start_year}},
  start_month                     	= 11, 11, 11,
  start_day                       	= 4, 4, 4, 
  start_hour                      	= 18, 18, 18, 
  start_minute                    	= 0, 0, 0, 
  start_second                    	= 0, 0, 0, 
- end_year                        	= 2000, 2000, 2000,
+ end_year                        	= {{end_year}}, {{end_year}}, {{end_year}},
  end_month                       	= 11, 11 ,11, 
  end_day                         	= 6, 6, 6, 
  end_hour                        	= 6, 6, 6, 
@@ -46,7 +46,7 @@
  time_step                       	= 30,
  time_step_fract_num              = 0,
  time_step_fract_den              = 1,
- max_dom                         	= 3,
+ max_dom                         	= 1,
  s_we                            	= 1,1,1,
  e_we                            	= 175,256,247, ! Adjust to yur domain
  s_sn                            	= 1, 1, 1,    
@@ -81,7 +81,7 @@
  sf_sfclay_physics               	= 1,1,1,
  sf_surface_physics              	= 4,4,4,
  sf_lake_physics                 	= 0,0,0,
- sf_urban_physics                	= 3,3,3
+ sf_urban_physics                	= 0,0,0,
  bl_pbl_physics                  	= 8,8,8,		 ! To test no urban in 3rd domain
  use_wudapt_lcz                  	= 0,
  bldt                            	= 0,0,0,

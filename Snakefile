@@ -41,16 +41,29 @@ def build_runs():
 
 # Variables
 GRIB_BASE_DIR = config["grib_basedir"]
-RUN_BASE_DIR = config["run_basedir"]
+RUN_BASE_DIR_TEMPLATE = config["run_dir"]
+NAMELIST_WPS_TEMPLATE = config["namelist_wps"]
+NAMELIST_INPUT_TEMPLATE = config["namelist_input"]
 WPS_INSTALL_DIR = config["wps_install_dir"]
+
+def get_run_dir(domain, year):
+    """Expand run_dir template with domain and year"""
+    return RUN_BASE_DIR_TEMPLATE.format(domain=domain, year=year)
+
+def get_namelist_wps_template(domain):
+    """Expand namelist_wps template with domain"""
+    return NAMELIST_WPS_TEMPLATE.format(domain=domain)
+
+def get_namelist_input_template(domain):
+    """Expand namelist_input template with domain"""
+    return NAMELIST_INPUT_TEMPLATE.format(domain=domain)
 
 MONTHS = [f"{m:02d}" for m in range(11, 12)]
 RUNS = build_runs()
 ALL_METGRIDS = [
-    str(Path(RUN_BASE_DIR) / run["domain"] / run["year"] / ("metgrid.done"))
+    str(Path(get_run_dir(run["domain"], run["year"])) / "metgrid.done")
     for run in RUNS
 ]
-NAMELIST_WPS_TEMPLATE = config["namelist_wps"]
 
 
 localrules: all, namelist_wps
@@ -58,7 +71,7 @@ rule all:
     input:
         ALL_METGRIDS
 
-# snakemake -n '/gpfs/users/fernandezv/repos/WRFsnamekmake/data/ERA5/EUR/2000/ERA5-200011-pl.grib'
+
 rule download_ERA5:
     output:
         f"{GRIB_BASE_DIR}/{{domain}}/{{year}}/ERA5-{{year}}{{month}}-{{filetype}}.grib"
@@ -80,12 +93,12 @@ rule download_ERA5:
 
 rule namelist_wps:
     output: 
-        f"{RUN_BASE_DIR}/{{domain}}/{{year}}/namelist.wps"
+        f"{RUN_BASE_DIR_TEMPLATE}/namelist.wps"
     params:
         year=lambda wildcards: wildcards.year,
-        run_dir=lambda wildcards: str(Path(RUN_BASE_DIR) / wildcards.domain / wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.domain, wildcards.year),
         geo_data_path=lambda wildcards: str(Path(config["geo_em_dir"]) / wildcards.domain),
-        namelist_wps_template=NAMELIST_WPS_TEMPLATE,
+        namelist_wps_template=lambda wildcards: get_namelist_wps_template(wildcards.domain),
     shell:
         """
         mkdir -p {params.run_dir}
@@ -103,14 +116,14 @@ rule ungrib:
             month=MONTHS,
             filetype=["pl", "sl"],
         ),
-        namelist_wps=f"{RUN_BASE_DIR}/{{domain}}/{{year}}/namelist.wps"
+        namelist_wps=lambda wildcards: f"{get_run_dir(wildcards.domain, wildcards.year)}/namelist.wps"
 
     output:
-        f"{RUN_BASE_DIR}/{{domain}}/{{year}}/ungrib.done"
+        f"{RUN_BASE_DIR_TEMPLATE}/ungrib.done"
     params:
         year=lambda wildcards: wildcards.year,
         grib_dir=lambda wildcards: str(Path(GRIB_BASE_DIR) / wildcards.domain / wildcards.year),
-        run_dir=lambda wildcards: str(Path(RUN_BASE_DIR) / wildcards.domain / wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.domain, wildcards.year),
         geo_data_path=lambda wildcards: str(Path(config["geo_em_dir"]) / wildcards.domain),
         wps_dir=WPS_INSTALL_DIR,
         VTable=config["Vtable"],
@@ -142,16 +155,12 @@ rule ungrib:
 
 rule metgrid:
     input:
-        lambda wildcards: expand(
-            f"{RUN_BASE_DIR}/{{domain}}/{{year}}/ungrib.done",
-            domain=wildcards.domain,
-            year=wildcards.year,
-        )
+        lambda wildcards: f"{get_run_dir(wildcards.domain, wildcards.year)}/ungrib.done"
     output:
-        f"{RUN_BASE_DIR}/{{domain}}/{{year}}/metgrid.done"
+        f"{RUN_BASE_DIR_TEMPLATE}/metgrid.done"
     params:
         year=lambda wildcards: wildcards.year,
-        run_dir=lambda wildcards: str(Path(RUN_BASE_DIR) / wildcards.domain / wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.domain, wildcards.year),
         wps_dir=WPS_INSTALL_DIR,
         METGRID_TBL=config["METGRID.TBL"],
     # resources:
@@ -184,16 +193,12 @@ rule metgrid:
 
 rule real:
     input:
-        lambda wildcards: expand(
-            f"{RUN_BASE_DIR}/{{domain}}/{{year}}/real.done",
-            domain=wildcards.domain,
-            year=wildcards.year,
-        )
+        lambda wildcards: f"{get_run_dir(wildcards.domain, wildcards.year)}/metgrid.done"
     output:
-        f"{RUN_BASE_DIR}/{{domain}}/{{year}}/metgrid.done"
+        f"{RUN_BASE_DIR_TEMPLATE}/real.done"
     params:
         year=lambda wildcards: wildcards.year,
-        run_dir=lambda wildcards: str(Path(RUN_BASE_DIR) / wildcards.domain / wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.domain, wildcards.year),
     resources:
         slurm_partition="wncompute_meteo",
         runtime=10,
