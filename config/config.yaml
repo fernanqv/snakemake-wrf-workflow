@@ -1,0 +1,31 @@
+# Cartesian product of years and domains
+# years:
+#   - 2000
+#   - 2001
+# domains:
+#   - "EUR"
+
+# Combined runs (uncomment to use)
+runs:
+  - year: 2000
+    domain: "EUR"
+  - year: 2005
+    domain: "EUR"
+  - year: 2006
+    domain: "EUR"
+  - year: 2007
+    domain: "EUR"
+
+# Directories. Use absolute paths.
+grib_dir: "/gpfs/users/fernandezv/repos/WRFsnamekmake/data/ERA5"
+run_dir: "/gpfs/users/fernandezv/repos/WRFsnamekmake/run"
+wps_dir: "/gpfs/users/fernandezv/repos/WRFsnamekmake/eb/easybuild/software/WPS/4.6.0-foss-2024a-dmpar/WPS-4.6.0/"
+geo_em_dir: "/gpfs/users/fernandezv/repos/WRFsnamekmake/data/geo_em"
+
+# Templates
+namelist_wps: "/gpfs/users/fernandezv/repos/WRFsnamekmake/config/templates/namelist.wps"
+namelist_input: "/gpfs/users/fernandezv/repos/WRFsnamekmake/config/templates/namelist.input"
+
+# Others
+Vtable: "Vtable.ERA-interim.pl"
+METGRID.TBL: "METGRID.TBL"
