@@ -1,8 +1,8 @@
 &share
  wrf_core = 'ARW',
- max_dom = 1,
- start_date = '{{start_year}}-11-04_12:00:00', '{{start_year}}-11-04_12:00:00', '{{start_year}}-11-04_12:00:00',
- end_date   = '{{end_year}}-11-06_06:00:00', '{{end_year}}-11-06_06:00:00', '{{end_year}}-11-06_06:00:00',
+ max_dom = 3,
+ start_date = '2000-11-04_18:00:00', '2000-11-04_18:00:00', '2000-11-04_18:00:00',
+ end_date   = '2000-11-06_06:00:00', '2000-11-06_06:00:00', '2000-11-06_06:00:00',
  interval_seconds = 21600,
  io_form_geogrid = 2,
  debug_level = 0,
@@ -24,7 +24,7 @@
  truelat1  = 45,
  truelat2  = 30,
  stand_lon = -4,
- geog_data_path = '{{geo_data_path}}',
+ geog_data_path = '/gpfs/projects/meteo/WORK/josipa/CMIP6toWRF/WPS_GEOG/',
 /
 
 &ungrib
@@ -36,3 +36,4 @@
  fg_name = 'FILE',
  io_form_metgrid = 2,
 /
+

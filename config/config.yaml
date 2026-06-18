@@ -17,14 +17,14 @@ runs:
     domain: "EUR"
 
 # Directories. Use absolute paths.
-grib_dir: "/gpfs/users/fernandezv/repos/WRFsnamekmake/data/ERA5"
-run_dir: "/gpfs/users/fernandezv/repos/WRFsnamekmake/run"
-wps_dir: "/gpfs/users/fernandezv/repos/WRFsnamekmake/eb/easybuild/software/WPS/4.6.0-foss-2024a-dmpar/WPS-4.6.0/"
-geo_em_dir: "/gpfs/users/fernandezv/repos/WRFsnamekmake/data/geo_em"
+grib_basedir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/data/ERA5"
+run_basedir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/run"
+wps_install_dir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/eb/easybuild/software/WPS/4.6.0-foss-2024a-dmpar/WPS-4.6.0/"
+geo_em_dir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/data/geo_em"
 
 # Templates
-namelist_wps: "/gpfs/users/fernandezv/repos/WRFsnamekmake/config/templates/namelist.wps"
-namelist_input: "/gpfs/users/fernandezv/repos/WRFsnamekmake/config/templates/namelist.input"
+namelist_wps: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/templates/namelist.wps"
+namelist_input: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/templates/namelist.input"
 
 # Others
 Vtable: "Vtable.ERA-interim.pl"
