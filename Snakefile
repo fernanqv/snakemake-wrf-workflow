@@ -1,221 +1,180 @@
-# Snakefile para descargar y procesar datos ERA5
-# Uso:
-#   snakemake --config years="[2000,2001]" domains="[EUR,IBERIA]"
-#   snakemake --config runs="[{year: 2000, domain: EUR}, {year: 2001, domain: IBERIA}]"
-
 from itertools import product
 from pathlib import Path
 
-# Configuracion
 configfile: "config/config.yaml"
 
-
-def as_list(value):
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    return [value]
-
-
-def make_run(year, domain):
-    year = str(year)
-    return {
-        "year": year,
-        "domain": str(domain),
-    }
-
-
-def build_runs():
-    if "runs" in config:
-        return [
-            make_run(run["year"], run["domain"])
-            for run in config["runs"]
-        ]
-
-    years = [str(year) for year in as_list(config.get("years", config.get("year", 2000)))]
-    domains = [str(domain) for domain in as_list(config.get("domains", config.get("domain", "EUR")))]
-    return [
-        make_run(year, domain)
-        for year, domain in product(years, domains)
-    ]
-
-
-# Variables
-GRIB_BASE_DIR = config["grib_basedir"]
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
-NAMELIST_WPS_TEMPLATE = config["namelist_wps"]
-NAMELIST_INPUT_TEMPLATE = config["namelist_input"]
+GRIB_BASE_DIR = config["grib_basedir"]
 WPS_INSTALL_DIR = config["wps_install_dir"]
+ERA5_DOMAIN = config["era5_domain"]
+MONTHS = [f"{month:02d}" for month in range(11, 12)]
+ERA5_FILETYPES = ["pl", "sl"]
+GEO_EM_PATH = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
+print(f"RUN_BASE_DIR_TEMPLATE: {RUN_BASE_DIR_TEMPLATE}")
+print(f"GEO_EM_PATH: {GEO_EM_PATH}")
 
-def get_run_dir(domain, year):
+def get_run_dir(year):
     """Expand run_dir template with domain and year"""
-    return RUN_BASE_DIR_TEMPLATE.format(domain=domain, year=year)
+    return RUN_BASE_DIR_TEMPLATE.format(year=year)
 
-def get_namelist_wps_template(domain):
-    """Expand namelist_wps template with domain"""
-    return NAMELIST_WPS_TEMPLATE.format(domain=domain)
-
-def get_namelist_input_template(domain):
-    """Expand namelist_input template with domain"""
-    return NAMELIST_INPUT_TEMPLATE.format(domain=domain)
-
-MONTHS = [f"{m:02d}" for m in range(11, 12)]
-RUNS = build_runs()
+RUNS = config["runs"]
 ALL_METGRIDS = [
-    str(Path(get_run_dir(run["domain"], run["year"])) / "metgrid.done")
-    for run in RUNS
+    #str(Path(get_run_dir(run)) / "metgrid.done")
+    str(Path(get_run_dir(year)) / "metgrid.done")
+    for year in RUNS
 ]
 
+localrules: all, namelist_wps, namelist_wps_geogrid
 
-localrules: all, namelist_wps
 rule all:
     input:
         ALL_METGRIDS
 
 
-rule download_ERA5:
-    output:
-        f"{GRIB_BASE_DIR}/{{domain}}/{{year}}/ERA5-{{year}}{{month}}-{{filetype}}.grib"
-    params:
-        year=lambda wildcards: wildcards.year,
-        month=lambda wildcards: wildcards.month,
-        filetype=lambda wildcards: wildcards.filetype,
-        data_dir=GRIB_BASE_DIR,
-        domain=lambda wildcards: wildcards.domain,
-    resources:
-        slurm_partition="wncompute_ifca",
-        runtime=10,
-        slurm_extra="--exclude=wncompute022"
-    shell:
-        """
-        echo "Running: python ERA5/retrieve_era5.py {params.year} {params.month} {params.filetype} {params.data_dir} {params.domain}"
-        python ERA5/retrieve_era5.py {params.year} {params.month} {params.filetype} {params.data_dir} {params.domain}
-        """
+# TO DO: Download geog_data_path from https://www2.mmm.ucar.edu/wrf/site/access_code/geog_data.html if not available
 
 rule namelist_wps:
     output: 
         f"{RUN_BASE_DIR_TEMPLATE}/namelist.wps"
     params:
-        year=lambda wildcards: wildcards.year,
-        run_dir=lambda wildcards: get_run_dir(wildcards.domain, wildcards.year),
-        geo_data_path=lambda wildcards: str(Path(config["geo_em_dir"]) / wildcards.domain),
-        namelist_wps_template=lambda wildcards: get_namelist_wps_template(wildcards.domain),
+        geog_data_path=str(Path(config["geog_data_path"])),
+        geo_em_path=GEO_EM_PATH,
+        namelist_wps=config["namelist_wps"],
+        GEOGRID_TBL=config["GEOGRID.TBL"],
+        wps_dir=WPS_INSTALL_DIR,
     shell:
         """
         mkdir -p {params.run_dir}
         cd {params.run_dir}
-        jinja2 {params.namelist_wps_template} -D start_year={params.year} -D end_year={params.year} -D geo_data_path={params.geo_data_path} -o namelist.wps
+        jinja2 {params.namelist_wps_template} \
+            -D start_year={wildcards.year} \
+            -D end_year={wildcards.year} \
+            -D geog_data_path={params.geog_data_path} \
+            -o namelist.wps
         touch {output}
+        """
+
+rule namelist_wps_geogrid:
+    output: 
+        f"{GEO_EM_PATH}/namelist.wps"
+    params:
+        geog_data_path=str(Path(config["geog_data_path"])),
+        geo_em_path=GEO_EM_PATH,
+        namelist_wps=config["namelist_wps"],
+    shell:
+        """
+        mkdir -p {params.geo_em_path}
+        cd {params.geo_em_path}
+        jinja2 {params.namelist_wps} \
+            -D geog_data_path={params.geog_data_path} \
+            -o namelist.wps
+        touch {output}
+        """
+
+rule geogrid:
+    input:
+        namelist_wps=str(Path(GEO_EM_PATH) / "namelist.wps"),
+    output:
+        str(Path(GEO_EM_PATH) / "geogrid.done")
+    params:
+        geog_data_path=str(Path(config["geog_data_path"])),
+        geo_em_path=GEO_EM_PATH,
+        namelist_wps=config["namelist_wps"],
+        GEOGRID_TBL=config["GEOGRID.TBL"],
+        wps_dir=WPS_INSTALL_DIR,
+    resources:
+        tasks= 2,
+        mpi= "mpirun",
+    shell:
+        """
+        cd {params.geo_em_path}
+        mkdir -p geogrid
+        ln -sf {params.wps_dir}/geogrid/{params.GEOGRID_TBL} {params.geo_em_path}/geogrid/GEOGRID.TBL
+        {resources.mpi} -n {resources.tasks} geogrid.exe
+        touch {output}
+        """
+
+rule download_ERA5:
+    output:
+        f"{GRIB_BASE_DIR}/{{domain}}/{{year}}/ERA5-{{year}}{{month}}-{{filetype}}.grib"
+    params:
+        data_dir=GRIB_BASE_DIR,
+    shell:
+        """
+        echo "Running: python ERA5/retrieve_era5.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}"
+        python ERA5/retrieve_era5.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}
         """
 
 rule ungrib:
     input:
         gribs=lambda wildcards: expand(
-            f"{GRIB_BASE_DIR}/{{domain}}/{{year}}/ERA5-{{year}}{{month}}-{{filetype}}.grib",
-            domain=wildcards.domain,
+            f"{GRIB_BASE_DIR}/{ERA5_DOMAIN}/{{year}}/ERA5-{{year}}{{month}}-{{filetype}}.grib",
             year=wildcards.year,
             month=MONTHS,
-            filetype=["pl", "sl"],
+            filetype=ERA5_FILETYPES,
         ),
-        namelist_wps=lambda wildcards: f"{get_run_dir(wildcards.domain, wildcards.year)}/namelist.wps"
-
+        namelist_wps=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "namelist.wps"),
     output:
         f"{RUN_BASE_DIR_TEMPLATE}/ungrib.done"
     params:
-        year=lambda wildcards: wildcards.year,
-        grib_dir=lambda wildcards: str(Path(GRIB_BASE_DIR) / wildcards.domain / wildcards.year),
-        run_dir=lambda wildcards: get_run_dir(wildcards.domain, wildcards.year),
-        geo_data_path=lambda wildcards: str(Path(config["geo_em_dir"]) / wildcards.domain),
+        grib_dir=lambda wildcards: str(Path(GRIB_BASE_DIR) / ERA5_DOMAIN / wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.year),
         wps_dir=WPS_INSTALL_DIR,
         VTable=config["Vtable"],
-    resources:
-        slurm_partition="wncompute_ifca",
-        runtime=10,
-        slurm_extra="--exclude=wncompute022"
     shell:
         """ 
+        
         mkdir -p {params.run_dir}
         cd {params.run_dir}
 
         export PATH=$PATH:{params.wps_dir}
         
         # Link GRIB files
-        link_grib.csh {params.grib_dir}/
-
-        # Link geo_em files
-        ln -sf {params.geo_data_path}/* .
+        link_grib.csh {params.grib_dir}/*.grib
 
         # Link Vtable
         ln -sf {params.wps_dir}/ungrib/Variable_Tables/{params.VTable} Vtable
-        echo "antes"
+
         ungrib.exe
-        echo "despues"
 
         touch {output}
         """
 
 rule metgrid:
     input:
-        lambda wildcards: f"{get_run_dir(wildcards.domain, wildcards.year)}/ungrib.done"
+        ungrib=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "ungrib.done"),
+        geogrid=str(Path(GEO_EM_PATH) / "geogrid.done"),
     output:
         f"{RUN_BASE_DIR_TEMPLATE}/metgrid.done"
     params:
-        year=lambda wildcards: wildcards.year,
-        run_dir=lambda wildcards: get_run_dir(wildcards.domain, wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.year),
         wps_dir=WPS_INSTALL_DIR,
+        geo_em_path=GEO_EM_PATH,
         METGRID_TBL=config["METGRID.TBL"],
-    # resources:
-    #     slurm_partition="wncompute_meteo",
-    #     runtime=10,
-    #     slurm_extra="--exclude=wncompute022"
+    resources:
+        tasks= 2,
+        mpi= "mpirun",
     shell:
         """
-        set +u
-        source /cvmfs/software.eessi.io/versions/2025.06/init/bash
-        #module purge
+        # set +u
+        # source /cvmfs/software.eessi.io/versions/2025.06/init/bash
+        # #module purge
 
-        module use /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/eb/easybuild/modules/all
-        module load WPS/4.6.0-foss-2024a-dmpar
-        set -u
-        echo "Running metgrid for year {params.year} in {params.run_dir}"
+        # module use /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/eb/easybuild/modules/all
+        # module load WPS/4.6.0-foss-2024a-dmpar
+        # set -u
+        # export OMPI_MCA_pml=ob1
+        # export OMPI_MCA_btl=self,tcp
 
+        #source /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/source_files/wps_josipa.sh
+
+        echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
+        
         cd {params.run_dir}
         mkdir -p metgrid
-        cd metgrid
-        ln -sf {params.wps_dir}/metgrid/{params.METGRID_TBL} .
-        cd -
-
-        export OMPI_MCA_pml=ob1
-        export OMPI_MCA_btl=self,tcp
-        metgrid.exe
+        ln -sf {params.geo_em_path}/geo_em* .
+        ln -sf {params.wps_dir}/metgrid/{params.METGRID_TBL} {params.run_dir}/metgrid/GEOGRID.TBL
+        {resources.mpi} -n {resources.tasks} metgrid.exe
 
         touch {output}
         """
-
-rule real:
-    input:
-        lambda wildcards: f"{get_run_dir(wildcards.domain, wildcards.year)}/metgrid.done"
-    output:
-        f"{RUN_BASE_DIR_TEMPLATE}/real.done"
-    params:
-        year=lambda wildcards: wildcards.year,
-        run_dir=lambda wildcards: get_run_dir(wildcards.domain, wildcards.year),
-    resources:
-        slurm_partition="wncompute_meteo",
-        runtime=10,
-        slurm_extra="--exclude=wncompute022"
-    shell:
-        """
-        set +u
-        source /cvmfs/software.eessi.io/versions/2025.06/init/bash
-        module load WRF/4.6.1-foss-2024a-dmpar
-        set -u
-
-        echo "Running real for year {params.year} in {params.run_dir}"
-        cd {params.run_dir}
-        export OMPI_MCA_pml=ob1
-        export OMPI_MCA_btl=self,tcp
-        real.exe
-        touch {output}
-        """
-
-    

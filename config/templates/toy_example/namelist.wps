@@ -1,0 +1,38 @@
+&share
+ wrf_core = 'ARW',
+ max_dom = 1,
+ start_date = '{{start_year}}-11-04_12:00:00',
+ end_date   = '{{end_year}}-11-06_06:00:00',
+ interval_seconds = 21600,
+ io_form_geogrid = 2,
+ debug_level = 0,
+/
+
+&geogrid
+ parent_id         = 1
+ parent_grid_ratio = 1,
+ i_parent_start = 1,
+ j_parent_start = 1,
+ e_we = 175,
+ e_sn = 165,
+ geog_data_res = 'lowres+default'
+ dx = 9000,
+ dy = 9000,
+ map_proj  =  'lambert',
+ ref_lat   = 41.5,
+ ref_lon   = -3.8,
+ truelat1  = 45,
+ truelat2  = 30,
+ stand_lon = -4,
+ geog_data_path = '{{geog_data_path}}'
+/
+
+&ungrib
+ out_format = 'WPS',
+ prefix = 'FILE',
+/
+
+&metgrid
+ fg_name = 'FILE',
+ io_form_metgrid = 2,
+/

@@ -1,0 +1,23 @@
+# ==============================================================================
+# SNAKEMAKE SLURM PROFILE TEMPLATE
+# ==============================================================================
+# Instructions: 
+# 1. Copy this folder to a custom name (e.g., config/profiles/altamira)
+# 2. Replace the <PLACEHOLDERS> below with your cluster settings.
+# ==============================================================================
+
+# Target execution framework for Snakemake 8+
+executor: slurm
+
+# Global defaults applied to lightweight rules (Phases 1 & 2)
+default-resources:
+  slurm_partition: "wncompute_ifca"
+  runtime: 60
+
+
+# Snakemake orchestrator pacing parameters
+jobs: 100                       # Maximum number of parallel jobs to submit to Slurm
+restart-times: 1                # Auto-retry failed cluster jobs once (e.g., node eviction)
+max-jobs-per-second: 2          # Prevents throttling the Slurm controller API
+max-status-checks-per-second: 10
+local-cores: 1

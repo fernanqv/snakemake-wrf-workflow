@@ -7,25 +7,37 @@
 
 # Combined runs (uncomment to use)
 runs:
-  - year: 2000
-    domain: "EUR"
-  # - year: 2005
-  #   domain: "EUR"
+  - 2000
+  #- 2004
   # - year: 2006
   #   domain: "EUR"
   # - year: 2007
   #   domain: "EUR"
 
 # Directories. Use absolute paths.
-grib_basedir: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/data/ERA5"
-run_dir: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/run/{domain}/{year}"
-wps_install_dir: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/eb/easybuild/software/WPS/4.6.0-foss-2024a-dmpar/WPS-4.6.0/"
-geo_em_dir: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/data/geo_em"
+grib_basedir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/data/ERA5"
+run_dir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/run/{year}"
+#wps_install_dir: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/eb/easybuild/software/WPS/4.6.0-foss-2024a-dmpar/WPS-4.6.0/"
+wps_install_dir: "/gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WPS"
+wrf_install_dir: "/gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core"
+geog_data_path: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/data/WPS_GEOG_LOW_RES"
+era5_domain: "EUR"
+geo_em_path: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/data/geo_em/lowres/{era5_domain}"
 
 # Templates
-namelist_wps: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/config/templates/{domain}/namelist.wps"
-namelist_input: "/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/config/templates/{domain}/namelist.input"
+namelist_wps: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/templates/toy_example/namelist.wps"
+namelist_input: "/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/templates/toy_example/namelist.input"
 
 # Others
 Vtable: "Vtable.ERA-interim.pl"
 METGRID.TBL: "METGRID.TBL"
+GEOGRID.TBL: "GEOGRID.TBL.ARW"
+CAMtr_volume_mixing_ratio: "CAMtr_volume_mixing_ratio"
+
+#/gpfs/users/fernandezv/repos/snakemake-wrf-workflow/eb/easybuild/software/WPS/4.6.0-foss-2024a-dmpar/WPS-4.6.0/geogrid/GEOGRID.TBL
+# ln -s /cvmfs/software.eessi.io/versions/2025.06/software/linux/x86_64/intel/cascadelake/software/WRF/4.6.1-foss-2024a-dmpar/WRFV4.6.1/run/CAMtr_volume_mixing_ratio.SSP370 CAMtr_volume_mixing_ratio
+#ln -sf /cvmfs/software.eessi.io/versions/2025.06/software/linux/x86_64/intel/cascadelake/software/WRF/4.6.1-foss-2024a-dmpar/WRFV4.6.1/run/CAMtr_volume_mixing_ratio CAMtr_volume_mixing_ratio
+#ln -sf /cvmfs/software.eessi.io/versions/2025.06/software/linux/x86_64/intel/cascadelake/software/WRF/4.6.1-foss-2024a-dmpar/WRFV4.6.1/run/*.TBL .
+
+
+#ls /gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core 
