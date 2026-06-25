@@ -1,3 +1,9 @@
+# Instructions to run this workflow in altamira:
+
+# pixie shell
+# source /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/source_files/wps_josipa.sh
+# snakemake --profile=config/profiles/template_slurm/ 
+
 from itertools import product
 from pathlib import Path
 
@@ -6,32 +12,36 @@ configfile: "config/config.yaml"
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 GRIB_BASE_DIR = config["grib_basedir"]
 WPS_INSTALL_DIR = config["wps_install_dir"]
+WRF_INSTALL_DIR = config["wrf_install_dir"]
 ERA5_DOMAIN = config["era5_domain"]
 MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
 GEO_EM_PATH = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
-print(f"RUN_BASE_DIR_TEMPLATE: {RUN_BASE_DIR_TEMPLATE}")
-print(f"GEO_EM_PATH: {GEO_EM_PATH}")
+
 
 def get_run_dir(year):
     """Expand run_dir template with domain and year"""
     return RUN_BASE_DIR_TEMPLATE.format(year=year)
 
 RUNS = config["runs"]
-ALL_METGRIDS = [
-    #str(Path(get_run_dir(run)) / "metgrid.done")
-    str(Path(get_run_dir(year)) / "metgrid.done")
+ALL_WRFS = [
+    str(Path(get_run_dir(year)) / "wrf.done")
     for year in RUNS
 ]
 
-localrules: all, namelist_wps, namelist_wps_geogrid
+localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 
 rule all:
     input:
-        ALL_METGRIDS
+        ALL_WRFS
 
 
-# TO DO: Download geog_data_path from https://www2.mmm.ucar.edu/wrf/site/access_code/geog_data.html if not available
+# TODO: decide which symbolic links are created by default and which are provided by the user. For example, the GEOGRID.TBL and METGRID.TBL files are provided by the user, but the Vtable is created by default. The user can provide a custom Vtable if desired.
+# TODO: Download geog_data_path from https://www2.mmm.ucar.edu/wrf/site/access_code/geog_data.html if not available
+# TODO: improve ERA5/retrieve_era5.py to support days as an argument. Decide how to handle in Snakefile.
+# TODO: Decide how to handle WPS and WRF environments. Now, first we source josipa's script in the UI and the env variables are automatically exported to the WN
+# TODO: Ask Josipa if it would be possible to clean the WRF/run template folder. /gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core/run/
+# TODO: Documentation
 
 rule namelist_wps:
     output: 
@@ -42,11 +52,12 @@ rule namelist_wps:
         namelist_wps=config["namelist_wps"],
         GEOGRID_TBL=config["GEOGRID.TBL"],
         wps_dir=WPS_INSTALL_DIR,
+        run_dir=lambda wildcards: get_run_dir(wildcards.year),
     shell:
         """
         mkdir -p {params.run_dir}
         cd {params.run_dir}
-        jinja2 {params.namelist_wps_template} \
+        jinja2 {params.namelist_wps} \
             -D start_year={wildcards.year} \
             -D end_year={wildcards.year} \
             -D geog_data_path={params.geog_data_path} \
@@ -70,6 +81,24 @@ rule namelist_wps_geogrid:
             -o namelist.wps
         touch {output}
         """
+
+rule namelist_input:
+    output:
+        f"{RUN_BASE_DIR_TEMPLATE}/namelist.input"
+    params:
+        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        namelist_input_template=str(Path(config["namelist_input"])),
+    shell:
+        """
+        mkdir -p {params.run_dir}
+        cd {params.run_dir}
+        jinja2 {params.namelist_input_template} \
+            -D start_year={wildcards.year} \
+            -D end_year={wildcards.year} \
+            -o namelist.input
+        touch {output}
+        """
+
 
 rule geogrid:
     input:
@@ -102,7 +131,7 @@ rule download_ERA5:
     shell:
         """
         echo "Running: python ERA5/retrieve_era5.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}"
-        python ERA5/retrieve_era5.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}
+        python ERA5/retrieve_era5_days4_6.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}
         """
 
 rule ungrib:
@@ -156,25 +185,64 @@ rule metgrid:
         mpi= "mpirun",
     shell:
         """
-        # set +u
-        # source /cvmfs/software.eessi.io/versions/2025.06/init/bash
-        # #module purge
-
-        # module use /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/eb/easybuild/modules/all
-        # module load WPS/4.6.0-foss-2024a-dmpar
-        # set -u
-        # export OMPI_MCA_pml=ob1
-        # export OMPI_MCA_btl=self,tcp
-
-        #source /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/source_files/wps_josipa.sh
-
         echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
         
         cd {params.run_dir}
         mkdir -p metgrid
         ln -sf {params.geo_em_path}/geo_em* .
-        ln -sf {params.wps_dir}/metgrid/{params.METGRID_TBL} {params.run_dir}/metgrid/GEOGRID.TBL
+        ln -sf {params.wps_dir}/metgrid/{params.METGRID_TBL} {params.run_dir}/metgrid/METGRID.TBL
         {resources.mpi} -n {resources.tasks} metgrid.exe
 
         touch {output}
         """
+
+rule real:
+    input:
+        metgrid=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "metgrid.done"),
+        namelist_input=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "namelist.input"),
+    output:
+        f"{RUN_BASE_DIR_TEMPLATE}/real.done"
+    params:
+        year=lambda wildcards: wildcards.year,
+        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+    resources:
+        tasks= 2,
+        mpi= "mpirun",
+    shell:
+        """
+        echo "Running real for year {params.year} in {params.run_dir}"
+        cd {params.run_dir}
+        {resources.mpi} -n {resources.tasks} real.exe
+        touch {output}
+        """
+
+rule wrf:
+    input:
+        real=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "real.done"),
+    output:
+        f"{RUN_BASE_DIR_TEMPLATE}/wrf.done"
+    params:
+        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        wrf_run_dir=str(Path(WRF_INSTALL_DIR) / "run"),
+    resources:
+        tasks=16,
+        mpi="mpirun",
+    shell:
+        """
+        echo "Running wrf for year {wildcards.year} in {params.run_dir}"
+        mkdir -p {params.run_dir}
+        cd {params.run_dir}
+        find {params.wrf_run_dir} -maxdepth 1 -mindepth 1 \
+            ! -name 'wrf*' \
+            ! -name '*.exe' \
+            ! -name 'README*' \
+            ! -name '*rsl*' \
+            ! -name 'namelist.*' \
+            -exec ln -sf {{}} . \\;
+        echo "{resources.mpi} -n {resources.tasks} wrf.exe"
+        {resources.mpi} -n {resources.tasks} wrf.exe
+        touch {output}
+        """
+
+
+

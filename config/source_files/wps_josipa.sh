@@ -38,4 +38,4 @@ export I_MPI_FABRICS=shm:ofa
 export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so
 export I_MPI_PMI2_SUPPORT=1
 
-export PATH=$PATH:/gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WPS/
+export PATH=$PATH:/gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WPS/:/gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core/main

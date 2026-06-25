@@ -13,6 +13,7 @@ executor: slurm
 default-resources:
   slurm_partition: "wncompute_ifca"
   runtime: 60
+  mem_mb: 32000
 
 
 # Snakemake orchestrator pacing parameters

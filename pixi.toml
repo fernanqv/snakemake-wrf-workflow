@@ -16,6 +16,8 @@ snakemake-executor-plugin-slurm = "*"
 
 tcsh = "*"
 cdo = ">=2.6.1,<3"
+# This is required to generate the workflow PDF
+graphviz = ">=14.1.2,<15"
 
 [tasks]
 dry-run   = "snakemake --dry-run --profile"
