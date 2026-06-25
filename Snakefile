@@ -6,6 +6,7 @@
 
 from itertools import product
 from pathlib import Path
+from shlex import quote
 
 configfile: "config/config.yaml"
 
@@ -17,6 +18,10 @@ ERA5_DOMAIN = config["era5_domain"]
 MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
 GEO_EM_PATH = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
+WRF_RUN_EXCLUDE_PATTERNS = ["wrf*", "*.exe", "README*", "*rsl*", "namelist.*"]
+WRF_RUN_FIND_EXCLUDES = " ".join(
+    f"! -name {quote(pattern)}" for pattern in WRF_RUN_EXCLUDE_PATTERNS
+)
 
 
 def get_run_dir(year):
@@ -34,14 +39,6 @@ localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 rule all:
     input:
         ALL_WRFS
-
-
-# TODO: decide which symbolic links are created by default and which are provided by the user. For example, the GEOGRID.TBL and METGRID.TBL files are provided by the user, but the Vtable is created by default. The user can provide a custom Vtable if desired.
-# TODO: Download geog_data_path from https://www2.mmm.ucar.edu/wrf/site/access_code/geog_data.html if not available
-# TODO: improve ERA5/retrieve_era5.py to support days as an argument. Decide how to handle in Snakefile.
-# TODO: Decide how to handle WPS and WRF environments. Now, first we source josipa's script in the UI and the env variables are automatically exported to the WN
-# TODO: Ask Josipa if it would be possible to clean the WRF/run template folder. /gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core/run/
-# TODO: Documentation
 
 rule namelist_wps:
     output: 
@@ -224,6 +221,7 @@ rule wrf:
     params:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
         wrf_run_dir=str(Path(WRF_INSTALL_DIR) / "run"),
+        wrf_run_find_excludes=WRF_RUN_FIND_EXCLUDES,
     resources:
         tasks=16,
         mpi="mpirun",
@@ -233,16 +231,9 @@ rule wrf:
         mkdir -p {params.run_dir}
         cd {params.run_dir}
         find {params.wrf_run_dir} -maxdepth 1 -mindepth 1 \
-            ! -name 'wrf*' \
-            ! -name '*.exe' \
-            ! -name 'README*' \
-            ! -name '*rsl*' \
-            ! -name 'namelist.*' \
+            {params.wrf_run_find_excludes} \
             -exec ln -sf {{}} . \\;
         echo "{resources.mpi} -n {resources.tasks} wrf.exe"
         {resources.mpi} -n {resources.tasks} wrf.exe
         touch {output}
         """
-
-
-
