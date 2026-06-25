@@ -56,7 +56,17 @@ Slurm profile:
 ```bash
 source /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/source_files/wps_josipa.sh
 pixi shell
+ldd `which real.exe` | grep netcdf
 snakemake --profile=config/profiles/template_slurm/
+```
+
+Before running Snakemake, verify that the WRF environment is properly configured.
+The `ldd` command above should show the NetCDF libraries used by `real.exe`, for
+example:
+
+```text
+libnetcdff.so.7 => /gpfs/projects/meteo/opt/spack/opt/spack/linux-almalinux9-zen2/intel-2021.10.0/netcdf-fortran-4.6.1-qkxq3x6syfzslfo24e5wzcgllfrpisum/lib/libnetcdff.so.7
+libnetcdf.so.19 => /gpfs/projects/meteo/opt/spack/opt/spack/linux-almalinux9-zen2/intel-2021.10.0/netcdf-c-4.9.2-r7sfzbgpbqtqpxlk5l5swrdxoej7mh4c/lib/libnetcdf.so.19
 ```
 
 The Slurm profile lives in `config/profiles/template_slurm/`.
@@ -90,9 +100,6 @@ snakemake --dag | dot -Tpng > dag.png
   available.
 - Improve `ERA5/retrieve_era5.py` to support days as an argument. Decide how to
   handle this in the Snakefile.
-- Decide how to handle WPS and WRF environments. Currently, Josipa's script is
-  sourced in the UI and the environment variables are automatically exported to
-  the worker nodes.
 - Ask Josipa if it would be possible to clean the WRF/run template folder.
   Decide how to deal with the excludes:
   `/gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core/run/`.
