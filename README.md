@@ -22,6 +22,32 @@ are:
 - `geo_em_path`: directory for geogrid outputs.
 - `namelist_wps` and `namelist_input`: Jinja2 namelist templates.
 
+### **Optional**: WPS/WRF Compilation
+
+The workflow can optionally orchestrate the download, audit, and compilation of the required WPS and WRF binaries via an integrated external Snakemake module utilizing EESSI software stacks.
+
+To enable automated compilation before running the simulation:
+
+1. In `config/config.yaml`, set `compile_software: true`.
+2. Configure the GitHub repository target, version tag, and EESSI compiler toolchain environment variables:
+
+```yaml
+enable_compilation: true
+compilation_repo: "orviz/snakemake-wrf-wps-compilation"
+compilation_version: "0.4.0"
+
+compilation_config:
+  eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
+  wps_version: "4.6.0"
+  wrf_version: "4.6.1"
+  compiler: "intel"
+  toolchain_suffix: "-foss-2024a-dmpar"
+```
+
+When active, the workflow automatically injects your local `wps_install_dir` and `wrf_install_dir` paths into the compilation module. The binaries (`ungrib.exe` and `wrf.exe`) will be built on-the-fly and deposited directly into those target installation folders as dynamic prerequisites before any WPS or WRF simulation rules are triggered.
+
+*Note: If `enable_compilation` is set to `false`, the workflow bypasses the external compilation module entirely and expects pre-existing binaries to be available at the configured installation paths.*
+
 ## Examples
 
 There are two example configurations in the repository. The current `Snakefile`
