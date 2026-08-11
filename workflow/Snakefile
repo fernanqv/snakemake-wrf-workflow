@@ -1,14 +1,17 @@
 # # Instructions to run this workflow in altamira:
-# 
+#
 # # FIRST TIME ONLY
 # git worktree add config/profiles hpc-profiles # this will load 'altamira' profile under 'config/profiles/altamira/'
 # # FOR EVERY WORKFLOW RUN
 # pixi run hpc-profile altamira
+
 from itertools import product
 from pathlib import Path
 from shlex import quote
 
 configfile: "config/config.yaml"
+
+default_target: "run_workflow"
 
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 GRIB_BASE_DIR = config["grib_basedir"]
@@ -23,24 +26,48 @@ WRF_RUN_FIND_EXCLUDES = " ".join(
     f"! -name {quote(pattern)}" for pattern in WRF_RUN_EXCLUDE_PATTERNS
 )
 
+def get_run_dir(year):
+    """Expand run_dir template with domain and year"""
+    return RUN_BASE_DIR_TEMPLATE.format(year=year)
+
+RUNS = config["runs"]
+ALL_WRFS = [
+    str(Path(get_run_dir(year)) / "wrf.done")
+    for year in RUNS
+]
+
+localrules: run_workflow, namelist_wps, namelist_wps_geogrid, namelist_input
+
+rule run_workflow:
+    input:
+        ALL_WRFS
+
 # ==============================================================================
 # INTEGRATION WITH WRF/WPS COMPILATION MODULE
 # ==============================================================================
 COMPILATION_DEP = []
 
+COMPILATION_REPO = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
+COMPILATION_VERSION = config.get("compilation_version", "0.4.0-alpha6")
+
 module wrf_wps_compilation:
-    snakefile: "gh:orviz/snakemake-wrf-wps-compilation@0.4.0-alpha1:workflow/Snakefile"
-    config: config.get("compile_config", {})
+    snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
+    config: config.get("compilation_config", {})
 
-if config.get("compile_software", False):
-    # Import rules from the compilation module, but rename the 'all' rule to avoid conflicts.
-    # use rule * from wrf_wps_compilation exclude all
-    use rule all from wrf_wps_compilation as run_compilation
+if config.get("enable_compilation", False):
+    if "compilation_config" not in config:
+        config["compilation_config"] = {}
+    config["compilation_config"]["wps_bin_dir"] = WPS_INSTALL_DIR
+    config["compilation_config"]["wrf_bin_dir"] = WRF_INSTALL_DIR
 
-    # Redefine installation variables
-    WPS_INSTALL_DIR = lambda wildcards: rules.run_compilation.output[0]
-    WRF_INSTALL_DIR = lambda wildcards: rules.run_compilation.output[1]
-    COMPILATION_DEP = [rules.run_compilation.output]
+    use rule audit_eessi_status from wrf_wps_compilation as compilation_audit
+    use rule compile_software_via_eb from wrf_wps_compilation as compilation_exec
+
+    COMPILATION_DEP = [
+        f"{WPS_INSTALL_DIR}/ungrib.exe",
+        f"{WRF_INSTALL_DIR}/wrf.exe"
+    ]
+
 # ==============================================================================
 
 def get_run_dir(year):
@@ -60,7 +87,7 @@ rule all:
         ALL_WRFS
 
 rule namelist_wps:
-    output: 
+    output:
         f"{RUN_BASE_DIR_TEMPLATE}/namelist.wps"
     params:
         geog_data_path=str(Path(config["geog_data_path"])),
@@ -82,7 +109,7 @@ rule namelist_wps:
         """
 
 rule namelist_wps_geogrid:
-    output: 
+    output:
         f"{GEO_EM_PATH}/namelist.wps"
     params:
         geog_data_path=str(Path(config["geog_data_path"])),
@@ -167,13 +194,13 @@ rule ungrib:
         wps_dir=WPS_INSTALL_DIR,
         VTable=config["Vtable"],
     shell:
-        """ 
-        
+        """
+
         mkdir -p {params.run_dir}
         cd {params.run_dir}
 
         export PATH=$PATH:{params.wps_dir}
-        
+
         # Link GRIB files
         link_grib.csh {params.grib_dir}/*.grib
 
@@ -202,7 +229,7 @@ rule metgrid:
     shell:
         """
         echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
-        
+
         cd {params.run_dir}
         mkdir -p metgrid
         ln -sf {params.geo_em_path}/geo_em* .

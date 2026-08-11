@@ -43,8 +43,10 @@ CAMtr_volume_mixing_ratio: "CAMtr_volume_mixing_ratio"
 #ls /gpfs/projects/meteo/WORK/ASNA/projects/cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core
 
 # WRF and WPS compilation settings
-compile_software: true  # Cambiar a 'false' si ya está compilado en el HPC
-compile_config:
+enable_compilation: false  # enable/disable compilation
+compilation_repo: "orviz/snakemake-wrf-wps-compilation"
+compilation_version: "0.4.0"
+compilation_config:
   eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
   wps_version: "4.6.0"
   wrf_version: "4.6.1"
