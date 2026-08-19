@@ -8,6 +8,9 @@ template namelists, and table names are configured. The Snakefile uses those
 values to build the WPS and WRF steps: namelist generation, geogrid, ERA5
 download, ungrib, metgrid, real, and wrf.
 
+The workflow features automated metadata generation for each workflow run leveraging
+[RO-Crate metadata packaging solution](https://www.researchobject.org/ro-crate/).
+
 ## Configuration
 
 Edit `config/config.yaml` before running the workflow. The most important values
@@ -60,7 +63,7 @@ to reduce the workflow runtime by downloading only the required days.
 
 ## Workflow Execution
 
-This project uses Pixi to manage its environment and execute workflows via automated tasks.
+This project uses [Pixi](https://pixi.prefix.dev/) to manage its environment and execute workflows via automated tasks.
 
 ### 1. Running Locally
 
@@ -103,6 +106,9 @@ pixi run hpc-profile altamira --dry-run
 
 # Execution limiting concurrent Slurm jobs
 pixi run hpc-profile altamira --jobs 15
+
+# Run on Altamira while tracking metadata provenance via RO-Crate
+pixi run hpc-profile altamira --workflow-profile ro-crate
 ```
 
 *Note: As described in the local execution section, any extra Snakemake argument is passed directly to the pixi task. However, Slurm-related settings are defined through the profile configuration under `profiles/<profile>/config.yaml`*
