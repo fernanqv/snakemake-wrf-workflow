@@ -21,15 +21,19 @@ graphviz = ">=14.1.2,<15"
 
 [tasks]
 # Local
-dry-run   = "snakemake --dry-run --profile"
-run-local = "snakemake --cores all"
+dry-run     = "snakemake --dry-run --profile"
+run-local   = "snakemake --cores all"
+run-rocrate = "snakemake --cores all --workflow-profile ro-crate"
+
 # Generic Slurm
-run-slurm = "snakemake --profile"
+run-slurm  = "snakemake --profile"
+
 # HPC profiles
-hpc-profile = "PROFILE=$1; PROFILE_DIR=\"config/profiles/$PROFILE\"; ENV_SCRIPT=\"$PROFILE_DIR/set_env.sh\"; if [ -d \"$PROFILE_DIR\" ]; then if [ -f \"$ENV_SCRIPT\" ]; then source \"$ENV_SCRIPT\"; fi && snakemake --profile \"$PROFILE_DIR\" \"${@:2}\"; else echo \"Error: HPC profile'$PROFILE' not found under config/profiles/\"; exit 1; fi"
+hpc-profile = "PROFILE=$1; PROFILE_DIR=\"config/profiles/$PROFILE\"; ENV_SCRIPT=\"$PROFILE_DIR/set_env.sh\"; if [ -d \"$PROFILE_DIR\" ]; then if [ -f \"$ENV_SCRIPT\" ]; then source \"$ENV_SCRIPT\"; fi && snakemake --profile \"$PROFILE_DIR\" \"${@:2}\"; else echo \"Error: HPC profile '$PROFILE' not found under config/profiles/\"; exit 1; fi"
 
 [pypi-dependencies]
 jinja2-shell = ">=0.1.4, <0.2"
 jinja2-cli = ">=1.0.1, <2"
 cdsapi = "*"
+snakemake-report-plugin-rocrate = { git = "https://github.com/snakemake/snakemake-report-plugin-rocrate.git" }
 

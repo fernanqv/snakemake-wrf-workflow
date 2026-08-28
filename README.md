@@ -8,6 +8,9 @@ template namelists, and table names are configured. The Snakefile uses those
 values to build the WPS and WRF steps: namelist generation, geogrid, ERA5
 download, ungrib, metgrid, real, and wrf.
 
+The workflow features automated metadata generation for each workflow run leveraging
+[RO-Crate metadata packaging solution](https://www.researchobject.org/ro-crate/).
+
 ## Configuration
 
 Edit `config/config.yaml` before running the workflow. The most important values
@@ -22,6 +25,32 @@ are:
 - `geo_em_path`: directory for geogrid outputs.
 - `namelist_wps` and `namelist_input`: Jinja2 namelist templates.
 
+### **Optional**: WPS/WRF Compilation
+
+The workflow can optionally orchestrate the download, audit, and compilation of the required WPS and WRF binaries via an integrated external Snakemake module utilizing EESSI software stacks.
+
+To enable automated compilation before running the simulation:
+
+1. In `config/config.yaml`, set `compile_software: true`.
+2. Configure the GitHub repository target, version tag, and EESSI compiler toolchain environment variables:
+
+```yaml
+enable_compilation: true
+compilation_repo: "orviz/snakemake-wrf-wps-compilation"
+compilation_version: "0.4.0"
+
+compilation_config:
+  eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
+  wps_version: "4.6.0"
+  wrf_version: "4.6.1"
+  compiler: "intel"
+  toolchain_suffix: "-foss-2024a-dmpar"
+```
+
+When active, the workflow automatically injects your local `wps_install_dir` and `wrf_install_dir` paths into the compilation module. The binaries (`ungrib.exe` and `wrf.exe`) will be built on-the-fly and deposited directly into those target installation folders as dynamic prerequisites before any WPS or WRF simulation rules are triggered.
+
+*Note: If `enable_compilation` is set to `false`, the workflow bypasses the external compilation module entirely and expects pre-existing binaries to be available at the configured installation paths.*
+
 ## Examples
 
 There are two example configurations in the repository. The current `Snakefile`
@@ -34,7 +63,7 @@ to reduce the workflow runtime by downloading only the required days.
 
 ## Workflow Execution
 
-This project uses Pixi to manage its environment and execute workflows via automated tasks.
+This project uses [Pixi](https://pixi.prefix.dev/) to manage its environment and execute workflows via automated tasks.
 
 ### 1. Running Locally
 
@@ -77,6 +106,9 @@ pixi run hpc-profile altamira --dry-run
 
 # Execution limiting concurrent Slurm jobs
 pixi run hpc-profile altamira --jobs 15
+
+# Run on Altamira while tracking metadata provenance via RO-Crate
+pixi run hpc-profile altamira --workflow-profile ro-crate
 ```
 
 *Note: As described in the local execution section, any extra Snakemake argument is passed directly to the pixi task. However, Slurm-related settings are defined through the profile configuration under `profiles/<profile>/config.yaml`*
