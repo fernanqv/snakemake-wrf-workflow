@@ -1,0 +1,46 @@
+# Spack environment for WRF compilation
+# Usage: spack env activate ./spack/environments.yaml
+
+spack:
+  version: 0.20.0
+  config:
+    build_jobs: 4
+    source_cache: $spack/var/spack/cache
+
+  packages:
+    # Compiler
+    gcc:
+      variants: "+binutils~gold~libiberty~nls ~pic +plugins ~strip"
+      
+    # MPI
+    openmpi:
+      variants: "+internal-hwloc+libevent"
+      
+    # HDF5 for WRF
+    hdf5:
+      variants: "+cxx+fortran+hl+shared"
+      
+    # NetCDF for WRF
+    netcdf-fortran:
+      variants: "+shared"
+      
+    netcdf-c:
+      variants: "+shared"
+
+  specs:
+    # Core dependencies for WRF compilation
+    - gcc@11.3.0
+    - openmpi@4.1.4 %gcc@11.3.0
+    - hdf5@1.14.0 %gcc@11.3.0 ^openmpi@4.1.4
+    - netcdf-c@4.9.0 %gcc@11.3.0 ^hdf5@1.14.0
+    - netcdf-fortran@4.6.0 %gcc@11.3.0 ^netcdf-c@4.9.0
+    - cmake@3.26.0 %gcc@11.3.0
+    - jasper@3.0.0 %gcc@11.3.0
+    - libpng@1.6.37 %gcc@11.3.0
+
+  view: default
+  modules:
+    default:
+      enable: [tcl]
+      tcl:
+        autoload: all

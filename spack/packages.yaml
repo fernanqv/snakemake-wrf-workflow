@@ -1,0 +1,39 @@
+# Spack packages configuration for WRF compilation
+# Customize build options for WRF and dependencies
+
+packages:
+  all:
+    variants: +shared
+    target: [x86_64]
+    concretization: together
+    
+  # Specific configurations for WRF
+  wrf:
+    buildable: true
+    variants: +shared
+    
+  # WPS configuration
+  wps:
+    buildable: true
+    variants: +shared
+    
+  # MPI selection
+  mpi:
+    buildable: false
+    providers:
+      mpi: [openmpi, mpich]
+      
+  # HDF5 with all needed features for WRF
+  hdf5:
+    variants: +cxx +fortran +hl +shared
+    
+  # NetCDF configuration
+  netcdf-c:
+    variants: +shared
+    
+  netcdf-fortran:
+    variants: +shared
+    
+  # Parallel NetCDF (optional, for large simulations)
+  parallel-netcdf:
+    variants: +shared
