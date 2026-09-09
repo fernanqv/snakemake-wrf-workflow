@@ -21,6 +21,12 @@ ERA5_DOMAIN = config["era5_domain"]
 MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
 GEO_EM_PATH = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
+GEOG_DATA_PATH = str(Path(config["geog_data_path"]))
+GEOG_DATA_URL = config.get(
+    "geog_data_url",
+    "https://www2.mmm.ucar.edu/wrf/src/wps_files/geog_low_res_mandatory.tar.gz",
+)
+GEOG_DATA_INDEX = str(Path(GEOG_DATA_PATH) / "topo_gmted2010_5m" / "index")
 WRF_RUN_EXCLUDE_PATTERNS = ["wrf*", "*.exe", "README*", "*rsl*", "namelist.*"]
 WRF_RUN_FIND_EXCLUDES = " ".join(
     f"! -name {quote(pattern)}" for pattern in WRF_RUN_EXCLUDE_PATTERNS
@@ -45,28 +51,45 @@ rule run_workflow:
 # ==============================================================================
 # INTEGRATION WITH WRF/WPS COMPILATION MODULE
 # ==============================================================================
-COMPILATION_DEP = []
-
 COMPILATION_REPO = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
 COMPILATION_VERSION = config.get("compilation_version", "0.4.0-alpha6")
+COMPILATION_ENABLED = config.get("enable_compilation", False)
+COMPILATION_CONFIG = dict(config.get("compilation_config", {}))
+
+WPS_COMPILATION_DEP = []
+WRF_COMPILATION_DEP = []
+WPS_RUNTIME_ENV = ""
+WRF_RUNTIME_ENV = ""
+
+if COMPILATION_ENABLED:
+    # The module must receive its final output directories when it is declared.
+    COMPILATION_CONFIG["wps_bin_dir"] = WPS_INSTALL_DIR
+    COMPILATION_CONFIG["wrf_bin_dir"] = WRF_INSTALL_DIR
+
+    WPS_COMPILATION_DEP = [f"{WPS_INSTALL_DIR}/ungrib.exe"]
+    WRF_COMPILATION_DEP = [f"{WRF_INSTALL_DIR}/wrf.exe"]
+
+    eessi_init = quote(COMPILATION_CONFIG["eessi_init_script"])
+    toolchain_suffix = COMPILATION_CONFIG.get("toolchain_suffix", "")
+    common_runtime_env = (
+        f"set +u; source {eessi_init}; module load EESSI-extend; set -u;"
+    )
+    WPS_RUNTIME_ENV = (
+        f"{common_runtime_env} module load "
+        f"WPS/{COMPILATION_CONFIG['wps_version']}{toolchain_suffix};"
+    )
+    WRF_RUNTIME_ENV = (
+        f"{common_runtime_env} module load "
+        f"WRF/{COMPILATION_CONFIG['wrf_version']}{toolchain_suffix};"
+    )
 
 module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
-    config: config.get("compilation_config", {})
+    config: COMPILATION_CONFIG
 
-if config.get("enable_compilation", False):
-    if "compilation_config" not in config:
-        config["compilation_config"] = {}
-    config["compilation_config"]["wps_bin_dir"] = WPS_INSTALL_DIR
-    config["compilation_config"]["wrf_bin_dir"] = WRF_INSTALL_DIR
-
+if COMPILATION_ENABLED:
     use rule audit_eessi_status from wrf_wps_compilation as compilation_audit
     use rule compile_software_via_eb from wrf_wps_compilation as compilation_exec
-
-    COMPILATION_DEP = [
-        f"{WPS_INSTALL_DIR}/ungrib.exe",
-        f"{WRF_INSTALL_DIR}/wrf.exe"
-    ]
 
 # ==============================================================================
 
@@ -143,8 +166,26 @@ rule namelist_input:
         """
 
 
+rule download_wps_geog:
+    output:
+        GEOG_DATA_INDEX
+    params:
+        url=GEOG_DATA_URL,
+        target_dir=GEOG_DATA_PATH,
+        required_file="topo_gmted2010_5m/index",
+    shell:
+        """
+        bash workflow/scripts/download_wps_geog.sh \
+            {params.url:q} \
+            {params.target_dir:q} \
+            {params.required_file:q}
+        """
+
+
 rule geogrid:
     input:
+        compilation=WPS_COMPILATION_DEP,
+        geog_data=GEOG_DATA_INDEX,
         namelist_wps=str(Path(GEO_EM_PATH) / "namelist.wps"),
     output:
         str(Path(GEO_EM_PATH) / "geogrid.done")
@@ -154,15 +195,18 @@ rule geogrid:
         namelist_wps=config["namelist_wps"],
         GEOGRID_TBL=config["GEOGRID.TBL"],
         wps_dir=WPS_INSTALL_DIR,
+        runtime_env=WPS_RUNTIME_ENV,
     resources:
         tasks= 2,
         mpi= "mpirun",
     shell:
         """
+        {params.runtime_env}
         cd {params.geo_em_path}
         mkdir -p geogrid
         ln -sf {params.wps_dir}/geogrid/{params.GEOGRID_TBL} {params.geo_em_path}/geogrid/GEOGRID.TBL
-        {resources.mpi} -n {resources.tasks} geogrid.exe
+        {resources.mpi} -n {resources.tasks} {params.wps_dir}/geogrid.exe
+        test -s {params.geo_em_path}/geo_em.d01.nc
         touch {output}
         """
 
@@ -179,6 +223,7 @@ rule download_ERA5:
 
 rule ungrib:
     input:
+        compilation=WPS_COMPILATION_DEP,
         gribs=lambda wildcards: expand(
             f"{GRIB_BASE_DIR}/{ERA5_DOMAIN}/{{year}}/ERA5-{{year}}{{month}}-{{filetype}}.grib",
             year=wildcards.year,
@@ -193,21 +238,20 @@ rule ungrib:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
         wps_dir=WPS_INSTALL_DIR,
         VTable=config["Vtable"],
+        runtime_env=WPS_RUNTIME_ENV,
     shell:
         """
-
+        {params.runtime_env}
         mkdir -p {params.run_dir}
         cd {params.run_dir}
 
-        export PATH=$PATH:{params.wps_dir}
-
         # Link GRIB files
-        link_grib.csh {params.grib_dir}/*.grib
+        {params.wps_dir}/link_grib.csh {params.grib_dir}/*.grib
 
         # Link Vtable
         ln -sf {params.wps_dir}/ungrib/Variable_Tables/{params.VTable} Vtable
 
-        ungrib.exe
+        {params.wps_dir}/ungrib.exe
 
         touch {output}
         """
@@ -223,24 +267,27 @@ rule metgrid:
         wps_dir=WPS_INSTALL_DIR,
         geo_em_path=GEO_EM_PATH,
         METGRID_TBL=config["METGRID.TBL"],
+        runtime_env=WPS_RUNTIME_ENV,
     resources:
         tasks= 2,
         mpi= "mpirun",
     shell:
         """
+        {params.runtime_env}
         echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
 
         cd {params.run_dir}
         mkdir -p metgrid
         ln -sf {params.geo_em_path}/geo_em* .
         ln -sf {params.wps_dir}/metgrid/{params.METGRID_TBL} {params.run_dir}/metgrid/METGRID.TBL
-        {resources.mpi} -n {resources.tasks} metgrid.exe
+        {resources.mpi} -n {resources.tasks} {params.wps_dir}/metgrid.exe
 
         touch {output}
         """
 
 rule real:
     input:
+        compilation=WRF_COMPILATION_DEP,
         metgrid=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "metgrid.done"),
         namelist_input=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "namelist.input"),
     output:
@@ -248,14 +295,17 @@ rule real:
     params:
         year=lambda wildcards: wildcards.year,
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        wrf_dir=WRF_INSTALL_DIR,
+        runtime_env=WRF_RUNTIME_ENV,
     resources:
         tasks= 2,
         mpi= "mpirun",
     shell:
         """
+        {params.runtime_env}
         echo "Running real for year {params.year} in {params.run_dir}"
         cd {params.run_dir}
-        {resources.mpi} -n {resources.tasks} real.exe
+        {resources.mpi} -n {resources.tasks} {params.wrf_dir}/real.exe
         touch {output}
         """
 
@@ -266,20 +316,23 @@ rule wrf:
         f"{RUN_BASE_DIR_TEMPLATE}/wrf.done"
     params:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        wrf_dir=WRF_INSTALL_DIR,
         wrf_run_dir=lambda wildcards: str(Path(WRF_INSTALL_DIR(wildcards)) / "run") if callable(WRF_INSTALL_DIR) else str(Path(WRF_INSTALL_DIR) / "run"),
         wrf_run_find_excludes=WRF_RUN_FIND_EXCLUDES,
+        runtime_env=WRF_RUNTIME_ENV,
     resources:
         tasks=16,
         mpi="mpirun",
     shell:
         """
+        {params.runtime_env}
         echo "Running wrf for year {wildcards.year} in {params.run_dir}"
         mkdir -p {params.run_dir}
         cd {params.run_dir}
         find {params.wrf_run_dir} -maxdepth 1 -mindepth 1 \
             {params.wrf_run_find_excludes} \
             -exec ln -sf {{}} . \\;
-        echo "{resources.mpi} -n {resources.tasks} wrf.exe"
-        {resources.mpi} -n {resources.tasks} wrf.exe
+        echo "{resources.mpi} -n {resources.tasks} {params.wrf_dir}/wrf.exe"
+        {resources.mpi} -n {resources.tasks} {params.wrf_dir}/wrf.exe
         touch {output}
         """
