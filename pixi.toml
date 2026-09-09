@@ -18,6 +18,10 @@ tcsh = "*"
 cdo = ">=2.6.1,<3"
 # This is required to generate the workflow PDF
 graphviz = ">=14.1.2,<15"
+# Keep the Conda packages compatible with snakemake-report-plugin-rocrate
+# and its roc-validator dependency.
+markdown-it-py = "<3"
+rich = "<14"
 
 [tasks]
 # Local
