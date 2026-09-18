@@ -40,7 +40,7 @@ localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 COMPILATION_DEP = []
 
 COMPILATION_REPO = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
-COMPILATION_VERSION = config.get("compilation_version", "0.4.0-alpha6")
+COMPILATION_VERSION = config.get("compilation_version", "0.5.0-alpha1")
 
 module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
@@ -52,13 +52,27 @@ if config.get("enable_compilation", False):
     config["compilation_config"]["wps_bin_dir"] = WPS_INSTALL_DIR
     config["compilation_config"]["wrf_bin_dir"] = WRF_INSTALL_DIR
 
-    use rule audit_eessi_status from wrf_wps_compilation as compilation_audit
-    use rule compile_software_via_eb from wrf_wps_compilation as compilation_exec
+    use rule audit_wps_status from wrf_wps_compilation as compilation_audit_wps
+    use rule audit_wrf_status from wrf_wps_compilation as compilation_audit_wrf
+    use rule compile_wps_via_eb from wrf_wps_compilation as compilation_exec_wps with:
+        output:
+            f"{WPS_INSTALL_DIR}/geogrid.exe",
+            f"{WPS_INSTALL_DIR}/ungrib.exe",
+            f"{WPS_INSTALL_DIR}/metgrid.exe"
 
-    COMPILATION_DEP = [
+    use rule compile_wrf_via_eb from wrf_wps_compilation as compilation_exec_wrf with:
+        output:
+            f"{WRF_INSTALL_DIR}/real.exe",
+            f"{WRF_INSTALL_DIR}/wrf.exe"
+
+    # Separate dependencies in accordance to WRF and WPS software
+    WPS_DEP = [
         f"{WPS_INSTALL_DIR}/geogrid.exe",
         f"{WPS_INSTALL_DIR}/ungrib.exe",
-        f"{WPS_INSTALL_DIR}/metgrid.exe",
+        f"{WPS_INSTALL_DIR}/metgrid.exe"
+    ]
+    WRF_DEP = [
+        f"{WRF_INSTALL_DIR}/real.exe",
         f"{WRF_INSTALL_DIR}/wrf.exe"
     ]
 
@@ -117,13 +131,13 @@ rule namelist_input:
             -D start_year={wildcards.year} \
             -D end_year={wildcards.year} \
             -o namelist.input
-        touch {output}
+        touch {output} # eliminar: jinja ya genera el fichero en {output}
         """
-
 
 rule geogrid:
     input:
         namelist_wps=str(Path(GEO_EM_PATH) / "namelist.wps"),
+        compilation=WPS_DEP
     output:
         str(Path(GEO_EM_PATH) / "geogrid.done")
     params:
@@ -140,7 +154,7 @@ rule geogrid:
         cd {params.geo_em_path}
         mkdir -p geogrid
         ln -sf {params.wps_dir}/geogrid/{params.GEOGRID_TBL} {params.geo_em_path}/geogrid/GEOGRID.TBL
-        {resources.mpi} -n {resources.tasks} geogrid.exe
+        {resources.mpi} -n {resources.tasks} {params.wps_dir}/geogrid.exe
         touch {output}
         """
 
@@ -164,6 +178,7 @@ rule ungrib:
             filetype=ERA5_FILETYPES,
         ),
         namelist_wps=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "namelist.wps"),
+        compilation=WPS_DEP
     output:
         f"{RUN_BASE_DIR_TEMPLATE}/ungrib.done"
     params:
@@ -180,12 +195,12 @@ rule ungrib:
         export PATH=$PATH:{params.wps_dir}
 
         # Link GRIB files
-        link_grib.csh {params.grib_dir}/*.grib
+        link_grib.csh {params.grib_dir}/*.grib # correccion: {params.wps_dir}/link_grib.csh {params.grib_dir}/*.grib
 
         # Link Vtable
         ln -sf {params.wps_dir}/ungrib/Variable_Tables/{params.VTable} Vtable
 
-        ungrib.exe
+        {params.wps_dir}/ungrib.exe
 
         touch {output}
         """
@@ -194,6 +209,7 @@ rule metgrid:
     input:
         ungrib=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "ungrib.done"),
         geogrid=str(Path(GEO_EM_PATH) / "geogrid.done"),
+        compilation=WPS_DEP
     output:
         f"{RUN_BASE_DIR_TEMPLATE}/metgrid.done"
     params:
@@ -211,8 +227,8 @@ rule metgrid:
         cd {params.run_dir}
         mkdir -p metgrid
         ln -sf {params.geo_em_path}/geo_em* .
-        ln -sf {params.wps_dir}/metgrid/{params.METGRID_TBL} {params.run_dir}/metgrid/METGRID.TBL
-        {resources.mpi} -n {resources.tasks} metgrid.exe
+        ln -sf {params.wps_dir}/metgrid/{params.METGRID_TBL} metgrid/METGRID.TBL
+        {resources.mpi} -n {resources.tasks} {params.wps_dir}/metgrid.exe
 
         touch {output}
         """
@@ -221,6 +237,7 @@ rule real:
     input:
         metgrid=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "metgrid.done"),
         namelist_input=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "namelist.input"),
+        compilation=WRF_DEP
     output:
         f"{RUN_BASE_DIR_TEMPLATE}/real.done"
     params:
@@ -233,13 +250,14 @@ rule real:
         """
         echo "Running real for year {params.year} in {params.run_dir}"
         cd {params.run_dir}
-        {resources.mpi} -n {resources.tasks} real.exe
+        {resources.mpi} -n {resources.tasks} {params.wps_dir}/real.exe # corregido: {resources.mpi} -n {resources.tasks} {params.wrf_dir}/real.exe
         touch {output}
         """
 
 rule wrf:
     input:
         real=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "real.done"),
+        compilation=WRF_DEP
     output:
         f"{RUN_BASE_DIR_TEMPLATE}/wrf.done"
     params:
