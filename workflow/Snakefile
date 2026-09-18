@@ -11,8 +11,6 @@ from shlex import quote
 
 configfile: "config/config.yaml"
 
-default_target: "run_workflow"
-
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 GRIB_BASE_DIR = config["grib_basedir"]
 WPS_INSTALL_DIR = config["wps_install_dir"]
@@ -30,17 +28,11 @@ def get_run_dir(year):
     """Expand run_dir template with domain and year"""
     return RUN_BASE_DIR_TEMPLATE.format(year=year)
 
-RUNS = config["runs"]
-ALL_WRFS = [
-    str(Path(get_run_dir(year)) / "wrf.done")
-    for year in RUNS
-]
-
-localrules: run_workflow, namelist_wps, namelist_wps_geogrid, namelist_input
-
-rule run_workflow:
+rule all:
     input:
-        ALL_WRFS
+        [str(Path(get_run_dir(year)) / "wrf.done") for year in config["runs"]]
+
+localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 
 # ==============================================================================
 # INTEGRATION WITH WRF/WPS COMPILATION MODULE
@@ -64,27 +56,13 @@ if config.get("enable_compilation", False):
     use rule compile_software_via_eb from wrf_wps_compilation as compilation_exec
 
     COMPILATION_DEP = [
+        f"{WPS_INSTALL_DIR}/geogrid.exe",
         f"{WPS_INSTALL_DIR}/ungrib.exe",
+        f"{WPS_INSTALL_DIR}/metgrid.exe",
         f"{WRF_INSTALL_DIR}/wrf.exe"
     ]
 
 # ==============================================================================
-
-def get_run_dir(year):
-    """Expand run_dir template with domain and year"""
-    return RUN_BASE_DIR_TEMPLATE.format(year=year)
-
-RUNS = config["runs"]
-ALL_WRFS = [
-    str(Path(get_run_dir(year)) / "wrf.done")
-    for year in RUNS
-]
-
-localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
-
-rule all:
-    input:
-        ALL_WRFS
 
 rule namelist_wps:
     output:
