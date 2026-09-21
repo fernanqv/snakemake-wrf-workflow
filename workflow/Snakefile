@@ -13,8 +13,12 @@ configfile: "config/config.yaml"
 
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 GRIB_BASE_DIR = config["grib_basedir"]
-WPS_INSTALL_DIR = config["wps_install_dir"]
 WRF_INSTALL_DIR = config["wrf_install_dir"]
+WPS_INSTALL_DIR = config["wps_install_dir"]
+WPS_VERSION = config["wps_version"]
+WRF_VERSION = config["wrf_version"]
+WPS_SOURCE_DIR = f"{config['wps_eb_root']}/WPS-{WPS_VERSION}"
+
 ERA5_DOMAIN = config["era5_domain"]
 MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
@@ -40,7 +44,7 @@ localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 COMPILATION_DEP = []
 
 COMPILATION_REPO = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
-COMPILATION_VERSION = config.get("compilation_version", "0.5.0-alpha1")
+COMPILATION_VERSION = config.get("compilation_version", "0.5.0-alpha2")
 
 module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
@@ -51,6 +55,8 @@ if config.get("enable_compilation", False):
         config["compilation_config"] = {}
     config["compilation_config"]["wps_bin_dir"] = WPS_INSTALL_DIR
     config["compilation_config"]["wrf_bin_dir"] = WRF_INSTALL_DIR
+    config["compilation_config"]["wps_version"] = WPS_VERSION
+    config["compilation_config"]["wrf_version"] = WRF_VERSION
 
     use rule audit_wps_status from wrf_wps_compilation as compilation_audit_wps
     use rule audit_wrf_status from wrf_wps_compilation as compilation_audit_wrf
