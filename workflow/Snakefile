@@ -5,24 +5,41 @@
 # # FOR EVERY WORKFLOW RUN
 # pixi run hpc-profile altamira
 
+configfile: "config/config.yaml"
+
+# Project's REPO_ROOT Path
+import os
+
+REPO_ROOT = config.get(
+    "repo_root_custom",
+    os.path.dirname(os.path.dirname(os.path.abspath(workflow.snakefile)))
+)
+PATH_KEYS = [
+    "grib_basedir", "run_dir", "geog_data_path", "geo_em_path",
+    "namelist_wps", "namelist_input", "wps_install_dir", "wrf_install_dir"
+]
+for key in PATH_KEYS:
+    if key in config:
+        config[key] = os.path.join(REPO_ROOT, config[key])
+
+# Environment Initialization
 from itertools import product
 from pathlib import Path
 from shlex import quote
 
-configfile: "config/config.yaml"
-
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 GRIB_BASE_DIR = config["grib_basedir"]
 
-EESSI_INIT = quote(config["eessi_init_script"])
-TOOLCHAIN_SUFFIX = config.get("toolchain_suffix", "")
 
 WRF_INSTALL_DIR = config["wrf_install_dir"]
 WPS_INSTALL_DIR = config["wps_install_dir"]
+WPS_BIN_DIR = f"{WPS_INSTALL_DIR}/bin"
+WRF_BIN_DIR = f"{WRF_INSTALL_DIR}/bin"
+
 WPS_VERSION = config["wps_version"]
 WRF_VERSION = config["wrf_version"]
-WPS_SOURCE_DIR = f"{config['wps_eb_root']}/WPS-{WPS_VERSION}"
-
+EESSI_INIT = quote(config["eessi_init_script"])
+TOOLCHAIN_SUFFIX = config.get("toolchain_suffix", "")
 common_runtime_env = (
     f"set +u; source {EESSI_INIT}; module load EESSI-extend; set -u;"
 )
@@ -64,7 +81,7 @@ localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 # INTEGRATION WITH WRF/WPS COMPILATION MODULE
 # ==============================================================================
 COMPILATION_REPO    = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
-COMPILATION_VERSION = config.get("compilation_version", "0.5.0-alpha2")
+COMPILATION_VERSION = config.get("compilation_version", "0.5.0-alpha3")
 COMPILATION_ENABLED = config.get("enable_compilation", False)
 
 if COMPILATION_ENABLED:
@@ -184,11 +201,10 @@ rule geogrid:
     output:
         str(Path(GEO_EM_PATH) / "geogrid.done")
     params:
-        geog_data_path=str(Path(config["geog_data_path"])),
         geo_em_path=GEO_EM_PATH,
         namelist_wps=config["namelist_wps"],
         GEOGRID_TBL=config["GEOGRID.TBL"],
-        wps_source_dir=WPS_SOURCE_DIR,
+        wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
     resources:
         tasks= 2,
@@ -200,9 +216,10 @@ rule geogrid:
         cd {params.geo_em_path}
         mkdir -p geogrid
 
-        ln -sf {params.wps_source_dir}/geogrid/{params.GEOGRID_TBL} geogrid/GEOGRID.TBL
-        {resources.mpi} -n {resources.tasks} geogrid.exe
-        # test -s {params.geo_em_path}/geo_em.d01.nc # NEW
+        ln -sf {params.wps_install_dir}/geogrid/{params.GEOGRID_TBL} geogrid/GEOGRID.TBL
+        {resources.mpi} -n {resources.tasks} {params.wps_install_dir}/geogrid.exe
+
+        test -s geo_em.d01.nc
         touch {output}
         """
 
@@ -233,19 +250,20 @@ rule ungrib:
         grib_dir=lambda wildcards: str(Path(GRIB_BASE_DIR) / ERA5_DOMAIN / wildcards.year),
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
         VTable=config["Vtable"],
-        wps_source_dir=WPS_SOURCE_DIR,
+        wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
     shell:
         """
         {params.runtime_env}
+
         mkdir -p {params.run_dir}
         cd {params.run_dir}
 
         # Link GRIB files
-        {params.wps_source_dir}/link_grib.csh {params.grib_dir}/*.grib
+        {params.wps_install_dir}/WPS-{WPS_VERSION}/link_grib.csh {params.grib_dir}/*.grib
 
         # Link Vtable
-        ln -sf {params.wps_source_dir}/ungrib/Variable_Tables/{params.VTable} Vtable
+        ln -sf {params.wps_install_dir}/WPS-{WPS_VERSION}/ungrib/Variable_Tables/{params.VTable} Vtable
 
         ungrib.exe
 
@@ -263,7 +281,7 @@ rule metgrid:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
         geo_em_path=GEO_EM_PATH,
         METGRID_TBL=config["METGRID.TBL"],
-        wps_source_dir=WPS_SOURCE_DIR,
+        wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
     resources:
         tasks= 2,
@@ -271,13 +289,14 @@ rule metgrid:
     shell:
         """
         {params.runtime_env}
-        echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
 
+        echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
         cd {params.run_dir}
         mkdir -p metgrid
+
         ln -sf {params.geo_em_path}/geo_em* .
-        ln -sf {params.wps_source_dir}/metgrid/{params.METGRID_TBL} metgrid/METGRID.TBL
-        
+        ln -sf {params.wps_install_dir}/WPS-{WPS_VERSION}/metgrid/{params.METGRID_TBL} metgrid/METGRID.TBL
+
         {resources.mpi} -n {resources.tasks} metgrid.exe
 
         touch {output}
@@ -300,12 +319,12 @@ rule real:
     shell:
         """
         {params.runtime_env}
-        
+
         echo "Running real for year {params.year} in {params.run_dir}"
         cd {params.run_dir}
-        
+
         {resources.mpi} -n {resources.tasks} real.exe
-        
+
         touch {output}
         """
 
@@ -314,10 +333,10 @@ rule wrf:
         real=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "real.done"),
         compilation=WRF_DEP
     output:
-        f"{RUN_BASE_DIR_TEMPLATE}/wrf.done" # str(Path(RUN_BASE_DIR_TEMPLATE) / "wrf.done")
+        str(Path(RUN_BASE_DIR_TEMPLATE) / "wrf.done")
     params:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
-        wrf_run_dir=str(Path(WRF_INSTALL_DIR) / "run"),
+        wrf_run_dir=str(Path(WRF_INSTALL_DIR) / f"WRF-{WRF_VERSION}" / "run"),
         wrf_run_find_excludes=WRF_RUN_FIND_EXCLUDES,
         runtime_env=WRF_RUNTIME_ENV,
     resources:
@@ -334,7 +353,7 @@ rule wrf:
         find {params.wrf_run_dir} -maxdepth 1 -mindepth 1 \
             {params.wrf_run_find_excludes} \
             -exec ln -sf {{}} . \\;
-        
+
         echo "{resources.mpi} -n {resources.tasks} wrf.exe"
         {resources.mpi} -n {resources.tasks} wrf.exe
 
