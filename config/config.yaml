@@ -29,6 +29,6 @@ CAMtr_volume_mixing_ratio: "CAMtr_volume_mixing_ratio"
 # WRF/WPS compilation
 enable_compilation: true  # enable/disable compilation
 compilation_repo: "orviz/snakemake-wrf-wps-compilation"
-compilation_version: "0.5.0-alpha3"
+compilation_version: "0.5.0"
 compilation_config:
   compiler: "intel"
