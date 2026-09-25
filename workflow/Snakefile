@@ -178,6 +178,7 @@ rule namelist_input:
     params:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
         namelist_input_template=str(Path(config["namelist_input"])),
+        # namelist_input_template=config["namelist_input"],
     shell:
         """
         mkdir -p {params.run_dir}
@@ -354,7 +355,7 @@ rule wrf:
         wrf_run_find_excludes=WRF_RUN_FIND_EXCLUDES,
         runtime_env=WRF_RUNTIME_ENV,
     resources:
-        tasks=16,
+        tasks=2,
         mpi="mpirun",
     shell:
         """
