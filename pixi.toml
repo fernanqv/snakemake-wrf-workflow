@@ -18,19 +18,26 @@ tcsh = "*"
 cdo = ">=2.6.1,<3"
 # This is required to generate the workflow PDF
 graphviz = ">=14.1.2,<15"
+# Keep the Conda packages compatible with snakemake-report-plugin-rocrate
+# and its roc-validator dependency.
+markdown-it-py = "<3"
+rich = "<14"
 
 [tasks]
 # Local
-dry-run   = "snakemake --dry-run --profile"
-run-local = "snakemake --cores all"
+dry-run     = "snakemake --dry-run --profile"
+run-local   = "snakemake --cores all"
+run-rocrate = "snakemake --cores all --workflow-profile ro-crate"
+
 # Generic Slurm
-run-slurm = "snakemake --profile"
-# Altamira profile
-dry-altamira = "source /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/source_files/wps_josipa.sh && ldd $(which real.exe) | grep netcdf && snakemake --profile config/profiles/template_slurm --dry-run"
-run-altamira = "source /gpfs/users/fernandezv/repos/snakemake-wrf-workflow/config/source_files/wps_josipa.sh && snakemake --profile config/profiles/template_slurm"
+run-slurm  = "snakemake --profile"
+
+# HPC profiles
+hpc-profile = "PROFILE=$1; PROFILE_DIR=\"config/profiles/$PROFILE\"; ENV_SCRIPT=\"$PROFILE_DIR/set_env.sh\"; if [ -d \"$PROFILE_DIR\" ]; then if [ -f \"$ENV_SCRIPT\" ]; then source \"$ENV_SCRIPT\"; fi && snakemake --profile \"$PROFILE_DIR\" \"${@:2}\"; else echo \"Error: HPC profile '$PROFILE' not found under config/profiles/\"; exit 1; fi"
 
 [pypi-dependencies]
 jinja2-shell = ">=0.1.4, <0.2"
 jinja2-cli = ">=1.0.1, <2"
 cdsapi = "*"
+snakemake-report-plugin-rocrate = { git = "https://github.com/snakemake/snakemake-report-plugin-rocrate.git" }
 

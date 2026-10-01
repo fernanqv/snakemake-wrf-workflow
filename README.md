@@ -8,6 +8,9 @@ template namelists, and table names are configured. The Snakefile uses those
 values to build the WPS and WRF steps: namelist generation, geogrid, ERA5
 download, ungrib, metgrid, real, and wrf.
 
+The workflow features automated metadata generation for each workflow run leveraging
+[RO-Crate metadata packaging solution](https://www.researchobject.org/ro-crate/).
+
 ## Configuration
 
 Edit `config/config.yaml` before running the workflow. The most important values
@@ -22,6 +25,32 @@ are:
 - `geo_em_path`: directory for geogrid outputs.
 - `namelist_wps` and `namelist_input`: Jinja2 namelist templates.
 
+### **Optional**: WPS/WRF Compilation
+
+The workflow can optionally orchestrate the download, audit, and compilation of the required WPS and WRF binaries via an integrated external Snakemake module utilizing EESSI software stacks.
+
+To enable automated compilation before running the simulation:
+
+1. In `config/config.yaml`, set `compile_software: true`.
+2. Configure the GitHub repository target, version tag, and EESSI compiler toolchain environment variables:
+
+```yaml
+enable_compilation: true
+compilation_repo: "orviz/snakemake-wrf-wps-compilation"
+compilation_version: "0.4.0"
+
+compilation_config:
+  eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
+  wps_version: "4.6.0"
+  wrf_version: "4.6.1"
+  compiler: "intel"
+  toolchain_suffix: "-foss-2024a-dmpar"
+```
+
+When active, the workflow automatically injects your local `wps_install_dir` and `wrf_install_dir` paths into the compilation module. The binaries (`ungrib.exe` and `wrf.exe`) will be built on-the-fly and deposited directly into those target installation folders as dynamic prerequisites before any WPS or WRF simulation rules are triggered.
+
+*Note: If `enable_compilation` is set to `false`, the workflow bypasses the external compilation module entirely and expects pre-existing binaries to be available at the configured installation paths.*
+
 ## Examples
 
 There are two example configurations in the repository. The current `Snakefile`
@@ -34,58 +63,78 @@ to reduce the workflow runtime by downloading only the required days.
 
 ## Workflow Execution
 
-This project uses Pixi to manage its environment and execute workflows via automated tasks.
+This project uses [Pixi](https://pixi.prefix.dev/) to manage its environment and execute workflows via automated tasks. Make sure to [install Pixi](https://pixi.prefix.dev/latest/installation/) before continuing.
 
-### 1. Dry Run (Recommended first step)
+### 1. Running Locally
 
-To validate the workflow structure, check inputs/outputs, and see what rules will execute without actually running them:
+To validate the workflow structure or run small test domains on your local machine:
 
 ```bash
+# Dry run to preview the execution plan
 pixi run dry-run
+
+# Execute locally using all available cores
+pixi run run-local
 ```
 
-### 2. Execution
+*Note: If you need to append extra Snakemake arguments, like targeting a specific rule or requesting a fixed number of cores, you can pass them directly at the end of the command, for example: `pixi run run-local --cores 4`*
 
-Depending on your infrastructure, run the workflow using one of the following commands:
+### 2. Running on HPC
 
-- **Local execution** (on your current machine):
+HPC cluster configurations and Slurm scheduler flags are decoupled from the scientific code using *Git Worktrees* to ensure project portability.
+
+- **Step 2.1: Embed the HPC profile**
+
+Initialize the cluster infrastructure `hpc-profiles` branch into your local profiles directory. For instance, adding Altamira cluster profile configuration will be done through:
 
 ```bash
-pixi run local
+git worktree add config/profiles hpc-profiles
 ```
 
-- **Cluster execution** (submitting jobs via SLURM):
+The command above will populate `config/profiles/` with the available cluster configurations (e.g., `altamira/`), each containing its own Slurm presets and a `set_env.sh` file.
+
+- **Step 2.2: Launch the Simulation**
+
+To execute the workflow, use the unifed Pixi's `hpc-profile` task. **Pass the name of the HPC profile as the first argument**, followed by any optional Snakemake flags:
 
 ```bash
-pixi run slurm
+# Standard execution on Altamira
+pixi run hpc-profile altamira
+
+# Dry-run execution on Altamira
+pixi run hpc-profile altamira --dry-run
+
+# Execution limiting concurrent Slurm jobs
+pixi run hpc-profile altamira --jobs 15
+
+# Run on Altamira while tracking metadata provenance via RO-Crate
+pixi run hpc-profile altamira --workflow-profile ro-crate
 ```
 
-*Note: If you need to append extra Snakemake arguments (like targeting a specific rule), you can pass them directly at the end of the command, for example: `pixi run run-local --cores 4`*
+*Note: As described in the local execution section, any extra Snakemake argument is passed directly to the pixi task. However, Slurm-related settings are defined through the profile configuration under `profiles/<profile>/config.yaml`*
 
-## Running on Altamira with Slurm
+*Note: For cluster-specific validations (like checking NetCDF paths via ldd on Altamira), please refer to the internal documentation at `config/profiles/<profile>/README.md` after mounting the worktree.*
 
-A specific Pixi task has been defined to run in Altamira HPC.
+### 3. Working with HPC profiles (Git Worktree)
 
-- **Dry-run**
+Once the Git Worktree is set up, any update in the configuration of any HPC profile will work as follows:
+
+- **Download configuration updates**:
 
 ```bash
-pixi run dry-altamira
+cd config/profiles/altamira
+git pull origin hpc-profiles
 ```
 
-*Before running Snakemake, verify that the WRF environment is properly configured. The `ldd` command above should show the NetCDF libraries used by `real.exe`, for example:*
-
-```text
-libnetcdff.so.7 => /gpfs/projects/meteo/opt/spack/opt/spack/linux-almalinux9-zen2/intel-2021.10.0/netcdf-fortran-4.6.1-qkxq3x6syfzslfo24e5wzcgllfrpisum/lib/libnetcdff.so.7
-libnetcdf.so.19 => /gpfs/projects/meteo/opt/spack/opt/spack/linux-almalinux9-zen2/intel-2021.10.0/netcdf-c-4.9.2-r7sfzbgpbqtqpxlk5l5swrdxoej7mh4c/lib/libnetcdf.so.19
-```
-
-- **Execution**
+- **Upload configuration changes**:
 
 ```bash
-pixi run run-altamira
+cd config/profiles/altamira
+# E.g. modify config.yaml...
+git add config.yaml
+git commit -m "Increase memory limits for WRF simulation"
+git push origin hpc-profiles
 ```
-
-*Note: The queue and resource parameters are managed by the profile at `config/profiles/template_slurm/`*.
 
 ## DAG
 
