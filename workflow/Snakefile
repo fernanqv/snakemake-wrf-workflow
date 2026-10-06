@@ -12,19 +12,16 @@ from itertools import product
 from pathlib import Path
 from shlex import quote
 
-# Project's REPO_ROOT Path
-REPO_ROOT = config.get(
-    "repo_root_custom",
-    os.path.dirname(os.path.dirname(os.path.abspath(workflow.snakefile)))
-)
+REPO_ROOT = Path(config.get("repo_root_custom", Path.cwd()))
 PATH_KEYS = [
     "grib_basedir", "run_dir", "geog_data_path", "geo_em_path",
     "namelist_wps", "namelist_input", "wps_install_dir", "wrf_install_dir"
 ]
 for key in PATH_KEYS:
     if key in config:
-        if not os.path.isabs(config[key]):
-            config[key] = os.path.join(REPO_ROOT, config[key])
+        path_val = Path(config[key])
+        if not path_val.is_absolute():
+            config[key] = str(REPO_ROOT / path_val)
 
 ERA5_DOMAIN = config["era5_domain"]
 config["geo_em_path"] = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
