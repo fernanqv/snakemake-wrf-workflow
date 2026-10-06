@@ -92,6 +92,9 @@ module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
     config: config
 
+wrf_wps_compilation.config["wps_install_dir"] = WPS_INSTALL_DIR
+wrf_wps_compilation.config["wrf_install_dir"] = WRF_INSTALL_DIR
+
 if COMPILATION_ENABLED:
     use rule audit_wps_status from wrf_wps_compilation as compilation_audit_wps
     use rule audit_wrf_status from wrf_wps_compilation as compilation_audit_wrf
@@ -101,7 +104,6 @@ if COMPILATION_ENABLED:
         input:
             wps_json  = "audit/WPS_status.json",
             wrf_json  = "audit/WRF_status.json",
-            # Forzamos a que la entrada cruzada use EXACTAMENTE tu misma variable local
             wrf_ready = f"{WRF_BIN_DIR}/wrf.exe"
         output:
             f"{WPS_BIN_DIR}/geogrid.exe",
