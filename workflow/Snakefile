@@ -46,14 +46,6 @@ WPS_BIN_DIR = f"{WPS_INSTALL_DIR}/bin"
 os.makedirs(WRF_BIN_DIR, exist_ok=True)
 os.makedirs(WPS_BIN_DIR, exist_ok=True)
 
-# Software paths
-eb_wrf_source = os.path.join(WRF_INSTALL_DIR, f"software/WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}/WRFV{WRF_VERSION}")
-eb_wps_source = os.path.join(WPS_INSTALL_DIR, f"software/WPS/{WPS_VERSION}{TOOLCHAIN_SUFFIX}/WPS-{WPS_VERSION}")
-
-if os.path.exists(eb_wps_source):
-    WRF_INSTALL_DIR = eb_wrf_source
-    WPS_INSTALL_DIR = eb_wps_source
-
 # EESSI
 EESSI_INIT = quote(config["eessi_init_script"])
 common_runtime_env = (
