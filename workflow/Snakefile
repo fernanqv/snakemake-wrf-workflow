@@ -37,11 +37,6 @@ TOOLCHAIN_SUFFIX = config.get("toolchain_suffix", "")
 
 WRF_INSTALL_DIR = config["wrf_install_dir"]
 WPS_INSTALL_DIR = config["wps_install_dir"]
-WRF_BIN_DIR = f"{WRF_INSTALL_DIR}/bin"
-WPS_BIN_DIR = f"{WPS_INSTALL_DIR}/bin"
-
-os.makedirs(WRF_BIN_DIR, exist_ok=True)
-os.makedirs(WPS_BIN_DIR, exist_ok=True)
 
 # EESSI
 EESSI_INIT = quote(config["eessi_init_script"])
@@ -90,40 +85,40 @@ COMPILATION_ENABLED = config.get("enable_compilation", False)
 
 module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
-    config: config
+    config: dict(config, wps_install_dir=WPS_INSTALL_DIR, wrf_install_dir=WRF_INSTALL_DIR)
 
 wrf_wps_compilation.config["wps_install_dir"] = WPS_INSTALL_DIR
 wrf_wps_compilation.config["wrf_install_dir"] = WRF_INSTALL_DIR
 
 if COMPILATION_ENABLED:
+    # 1. Audit rules
     use rule audit_wps_status from wrf_wps_compilation as compilation_audit_wps
     use rule audit_wrf_status from wrf_wps_compilation as compilation_audit_wrf
 
-    # FORZADO DE RUTAS ABSOLUTAS: Sincroniza el puzle del DAG en tu repositorio local
-    use rule compile_wps_via_eb from wrf_wps_compilation as compilation_exec_wps with:
-        input:
-            wps_json  = "audit/WPS_status.json",
-            wrf_json  = "audit/WRF_status.json",
-            wrf_ready = f"{WRF_BIN_DIR}/wrf.exe"
-        output:
-            f"{WPS_BIN_DIR}/geogrid.exe",
-            f"{WPS_BIN_DIR}/ungrib.exe",
-            f"{WPS_BIN_DIR}/metgrid.exe"
+    # 2. Compilation rules
+    use rule compile_wps_via_eb from wrf_wps_compilation as compilation_exec_wps
+    use rule compile_wrf_via_eb from wrf_wps_compilation as compilation_exec_wrf
 
-    use rule compile_wrf_via_eb from wrf_wps_compilation as compilation_exec_wrf with:
+    # 3. Software link rules
+    use rule create_wps_master_link from wrf_wps_compilation as compilation_link_wps with:
         output:
-            f"{WRF_BIN_DIR}/real.exe",
-            f"{WRF_BIN_DIR}/wrf.exe"
+            wps_ready = "audit/wps_link_ready.txt"
 
+    use rule create_wrf_master_link from wrf_wps_compilation as compilation_link_wrf with:
+        output:
+            wrf_ready = "audit/wrf_link_ready.txt"
+
+    # 4. Fill in the dependencies
     WPS_DEP = [
-        f"{WPS_BIN_DIR}/geogrid.exe",
-        f"{WPS_BIN_DIR}/ungrib.exe",
-        f"{WPS_BIN_DIR}/metgrid.exe"
+        "audit/wps_link_ready.txt"
     ]
     WRF_DEP = [
-        f"{WRF_BIN_DIR}/real.exe",
-        f"{WRF_BIN_DIR}/wrf.exe"
+        "audit/wrf_link_ready.txt"
     ]
+else:
+    # When compilation is disabled
+    WPS_DEP = []
+    WRF_DEP = []
 # ==============================================================================
 
 rule namelist_wps:
@@ -222,10 +217,11 @@ rule geogrid:
 
         ln -sf {params.wps_install_dir}/geogrid/{params.GEOGRID_TBL} geogrid/GEOGRID.TBL
 
-        {resources.mpi} -n {resources.tasks} geogrid.exe
+        {resources.mpi} -n {resources.tasks} {params.wps_install_dir}/geogrid.exe
 
         test -s geo_em.d01.nc
-        touch {output}
+
+        touch {output.done}
         """
 
 rule download_ERA5:
@@ -270,7 +266,7 @@ rule ungrib:
         # Link Vtable
         ln -sf {params.wps_install_dir}/ungrib/Variable_Tables/{params.VTable} Vtable
 
-        ungrib.exe
+        {params.wps_install_dir}/ungrib.exe
 
         touch {output}
         """
@@ -303,7 +299,7 @@ rule metgrid:
 
         ln -sf {params.wps_install_dir}/metgrid/{params.METGRID_TBL} metgrid/METGRID.TBL
 
-        {resources.mpi} -n {resources.tasks} metgrid.exe
+        {resources.mpi} -n {resources.tasks} {params.wps_install_dir}/metgrid.exe
 
         touch {output}
         """
@@ -318,6 +314,7 @@ rule real:
     params:
         year=lambda wildcards: wildcards.year,
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        wrf_install_dir=WRF_INSTALL_DIR,
         runtime_env=WRF_RUNTIME_ENV,
     resources:
         tasks= 2,
@@ -329,7 +326,7 @@ rule real:
         echo "Running real for year {params.year} in {params.run_dir}"
         cd {params.run_dir}
 
-        {resources.mpi} -n {resources.tasks} real.exe
+        {resources.mpi} -n {resources.tasks} {params.wrf_install_dir}/main/real.exe
 
         touch {output}
         """
@@ -344,6 +341,7 @@ rule wrf:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
         wrf_run_dir=str(Path(WRF_INSTALL_DIR) / "run"),
         wrf_run_find_excludes=WRF_RUN_FIND_EXCLUDES,
+        wrf_install_dir=WRF_INSTALL_DIR,
         runtime_env=WRF_RUNTIME_ENV,
     resources:
         tasks=2,
@@ -361,7 +359,7 @@ rule wrf:
             -exec ln -sf {{}} . \\;
 
         echo "{resources.mpi} -n {resources.tasks} wrf.exe"
-        {resources.mpi} -n {resources.tasks} wrf.exe
+        {resources.mpi} -n {resources.tasks} {params.wrf_install_dir}/main/wrf.exe
 
         touch {output}
         """
