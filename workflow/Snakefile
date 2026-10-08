@@ -80,7 +80,7 @@ localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 # INTEGRATION WITH WRF/WPS COMPILATION MODULE
 # ==============================================================================
 COMPILATION_REPO    = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
-COMPILATION_VERSION = config.get("compilation_version", "0.5.0")
+COMPILATION_VERSION = config.get("compilation_version", "0.6.0-alpha2")
 COMPILATION_ENABLED = config.get("enable_compilation", False)
 
 module wrf_wps_compilation:
@@ -96,8 +96,8 @@ if COMPILATION_ENABLED:
     use rule audit_wrf_status from wrf_wps_compilation as compilation_audit_wrf
 
     # 2. Compilation rules
-    use rule compile_wps_via_eb from wrf_wps_compilation as compilation_exec_wps
-    use rule compile_wrf_via_eb from wrf_wps_compilation as compilation_exec_wrf
+    use rule compile_wps from wrf_wps_compilation as compilation_exec_wps
+    use rule compile_wrf from wrf_wps_compilation as compilation_exec_wrf
 
     # 3. Software link rules
     use rule create_wps_master_link from wrf_wps_compilation as compilation_link_wps with:
