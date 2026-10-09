@@ -82,10 +82,11 @@ localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 COMPILATION_REPO    = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
 COMPILATION_VERSION = config.get("compilation_version", "0.6.0-alpha2")
 COMPILATION_ENABLED = config.get("enable_compilation", False)
+COMPILATION_CONFIG  = config.get("compilation_config", {})
 
 module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
-    config: dict(config, wps_install_dir=WPS_INSTALL_DIR, wrf_install_dir=WRF_INSTALL_DIR)
+    config: COMPILATION_CONFIG
 
 if COMPILATION_ENABLED:
     # 1. Audit rules
