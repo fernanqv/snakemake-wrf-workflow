@@ -40,17 +40,6 @@ WPS_INSTALL_DIR = config["wps_install_dir"]
 
 # EESSI
 EESSI_INIT = quote(config["eessi_init_script"])
-common_runtime_env = (
-    f"set +u; source {EESSI_INIT}; module load EESSI-extend; set -u;"
-)
-WRF_RUNTIME_ENV = (
-    f"{common_runtime_env} module load "
-    f"WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX};"
-)
-WPS_RUNTIME_ENV = (
-    f"{common_runtime_env} module load "
-    f"WPS/{WPS_VERSION}{TOOLCHAIN_SUFFIX};"
-)
 
 MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
@@ -112,11 +101,36 @@ if COMPILATION_ENABLED:
     WRF_DEP = [
         "audit/wrf_link_ready.txt"
     ]
+
+    # 5. Use/Load local modules
+    LOCAL_MODULES_PATH = os.path.abspath(".easybuild/modules/all")
+    USE_CMD = f"module use {LOCAL_MODULES_PATH}"
 else:
     # When compilation is disabled
     WPS_DEP = []
     WRF_DEP = []
+    USE_CMD = []
+
 # ==============================================================================
+
+# Runtime Environments for WPS and WRF
+WRF_RUNTIME_ENV = (
+    f"set +u; "
+    f"source {EESSI_INIT}; "
+    f"module load EESSI-extend; "
+    f"{USE_CMD} "
+    f"module load WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}; "
+    f"set -u;"
+)
+WPS_RUNTIME_ENV = (
+    f"set +u; "
+    f"source {EESSI_INIT}; "
+    f"module load EESSI-extend; "
+    f"{USE_CMD} "
+    f"module load WPS/{WPS_VERSION}{TOOLCHAIN_SUFFIX}; "
+    f"set -u;"
+)
+
 
 rule namelist_wps:
     output:
@@ -198,7 +212,6 @@ rule geogrid:
         nc   = str(Path(GEO_EM_PATH) / "geo_em.d01.nc")
     params:
         geo_em_path=GEO_EM_PATH,
-        namelist_wps=config["namelist_wps"],
         GEOGRID_TBL=config["GEOGRID.TBL"],
         wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
