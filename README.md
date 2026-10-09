@@ -63,7 +63,7 @@ to reduce the workflow runtime by downloading only the required days.
 
 ## Workflow Execution
 
-This project uses [Pixi](https://pixi.prefix.dev/) to manage its environment and execute workflows via automated tasks.
+This project uses [Pixi](https://pixi.prefix.dev/) to manage its environment and execute workflows via automated tasks. Make sure to [install Pixi](https://pixi.prefix.dev/latest/installation/) before continuing.
 
 ### 1. Running Locally
 
