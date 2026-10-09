@@ -87,9 +87,6 @@ module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
     config: dict(config, wps_install_dir=WPS_INSTALL_DIR, wrf_install_dir=WRF_INSTALL_DIR)
 
-wrf_wps_compilation.config["wps_install_dir"] = WPS_INSTALL_DIR
-wrf_wps_compilation.config["wrf_install_dir"] = WRF_INSTALL_DIR
-
 if COMPILATION_ENABLED:
     # 1. Audit rules
     use rule audit_wps_status from wrf_wps_compilation as compilation_audit_wps
