@@ -1,0 +1,18 @@
+executor: slurm
+
+jobs: 10
+
+printshellcmds: true
+keep-going: true
+rerun-incomplete: true
+show-failed-logs: true
+
+latency-wait: 60
+
+default-resources:
+  - slurm_partition=compute
+  - mem_mb=10000
+
+slurm-logdir: logs/slurm
+slurm-keep-successful-logs: true
+

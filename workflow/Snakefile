@@ -8,23 +8,19 @@
 configfile: "config/config.yaml"
 
 import os
-from itertools import product
 from pathlib import Path
 from shlex import quote
 
-# Project's REPO_ROOT Path
-REPO_ROOT = config.get(
-    "repo_root_custom",
-    os.path.dirname(os.path.dirname(os.path.abspath(workflow.snakefile)))
-)
+REPO_ROOT = Path(config.get("repo_root_custom", Path.cwd()))
 PATH_KEYS = [
     "grib_basedir", "run_dir", "geog_data_path", "geo_em_path",
     "namelist_wps", "namelist_input", "wps_install_dir", "wrf_install_dir"
 ]
 for key in PATH_KEYS:
     if key in config:
-        if not os.path.isabs(config[key]):
-            config[key] = os.path.join(REPO_ROOT, config[key])
+        path_val = Path(config[key])
+        if not path_val.is_absolute():
+            config[key] = str(REPO_ROOT / path_val)
 
 ERA5_DOMAIN = config["era5_domain"]
 config["geo_em_path"] = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
@@ -34,39 +30,15 @@ RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 GRIB_BASE_DIR = config["grib_basedir"]
 GEO_EM_PATH = config["geo_em_path"]
 
+# External runtime env 
+#TODO: Do we need to define these 3 variables here? 
 WPS_VERSION = config["wps_version"]
 WRF_VERSION = config["wrf_version"]
-TOOLCHAIN_SUFFIX = config.get("toolchain_suffix", "")
+TOOLCHAIN_SUFFIX = config.get("toolchain_suffix")
+EESSI_INIT = quote(config["eessi_init_script"])
 
 WRF_INSTALL_DIR = config["wrf_install_dir"]
 WPS_INSTALL_DIR = config["wps_install_dir"]
-WRF_BIN_DIR = f"{WRF_INSTALL_DIR}/bin"
-WPS_BIN_DIR = f"{WPS_INSTALL_DIR}/bin"
-
-os.makedirs(WRF_BIN_DIR, exist_ok=True)
-os.makedirs(WPS_BIN_DIR, exist_ok=True)
-
-# Software paths
-eb_wrf_source = os.path.join(WRF_INSTALL_DIR, f"software/WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}/WRFV{WRF_VERSION}")
-eb_wps_source = os.path.join(WPS_INSTALL_DIR, f"software/WPS/{WPS_VERSION}{TOOLCHAIN_SUFFIX}/WPS-{WPS_VERSION}")
-
-if os.path.exists(eb_wps_source):
-    WRF_INSTALL_DIR = eb_wrf_source
-    WPS_INSTALL_DIR = eb_wps_source
-
-# EESSI
-EESSI_INIT = quote(config["eessi_init_script"])
-common_runtime_env = (
-    f"set +u; source {EESSI_INIT}; module load EESSI-extend; set -u;"
-)
-WRF_RUNTIME_ENV = (
-    f"{common_runtime_env} module load "
-    f"WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX};"
-)
-WPS_RUNTIME_ENV = (
-    f"{common_runtime_env} module load "
-    f"WPS/{WPS_VERSION}{TOOLCHAIN_SUFFIX};"
-)
 
 MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
@@ -82,6 +54,39 @@ WRF_RUN_FIND_EXCLUDES = " ".join(
     f"! -name {quote(pattern)}" for pattern in WRF_RUN_EXCLUDE_PATTERNS
 )
 
+
+
+# GEOGRID
+GEOGRID_TBL = config.get("GEOGRID_TBL", "GEOGRID.TBL.ARW")
+GEOGRID_TASKS = int(config.get("geogrid_tasks", 1))
+
+# UNGRIB
+VTABLE = config.get("Vtable", "Vtable.ERA-interim.pl")
+
+# METGRID
+METGRID_TBL = config.get("METGRID_TBL", "METGRID.TBL")
+METGRID_TASKS = int(config.get("metgrid_tasks", 1))
+
+# REAL
+REAL_TASKS = int(config.get("real_tasks", 1))
+
+# WRF
+WRF_TASKS = int(config.get("wrf_tasks", 1))
+
+# MPI settings:
+MPI_LAUNCHER = config.get("mpi_launcher", "mpirun")
+
+
+def launch_command(executable, tasks, mpi):
+    """Run directly for one task, or use the configured MPI launcher."""
+    if tasks < 1:
+        raise ValueError("tasks must be at least 1")
+    executable = quote(str(executable))
+    if tasks == 1:
+        return executable
+    return f"{mpi} -n {tasks} {executable}"
+
+
 def get_run_dir(year):
     """Expand run_dir template with domain and year"""
     return RUN_BASE_DIR_TEMPLATE.format(year=year)
@@ -96,54 +101,82 @@ localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 # INTEGRATION WITH WRF/WPS COMPILATION MODULE
 # ==============================================================================
 COMPILATION_REPO    = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
-COMPILATION_VERSION = config.get("compilation_version", "0.5.0")
+COMPILATION_VERSION = config.get("compilation_version", "0.6.0")
 COMPILATION_ENABLED = config.get("enable_compilation", False)
+COMPILATION_CONFIG  = config.get("compilation_config", {})
 
 module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
-    config: config
+    config: COMPILATION_CONFIG
 
 if COMPILATION_ENABLED:
+    # 1. Audit rules
     use rule audit_wps_status from wrf_wps_compilation as compilation_audit_wps
     use rule audit_wrf_status from wrf_wps_compilation as compilation_audit_wrf
 
-    # FORZADO DE RUTAS ABSOLUTAS: Sincroniza el puzle del DAG en tu repositorio local
-    use rule compile_wps_via_eb from wrf_wps_compilation as compilation_exec_wps with:
-        input:
-            wps_json  = "audit/WPS_status.json",
-            wrf_json  = "audit/WRF_status.json",
-            # Forzamos a que la entrada cruzada use EXACTAMENTE tu misma variable local
-            wrf_ready = f"{WRF_BIN_DIR}/wrf.exe"
-        output:
-            f"{WPS_BIN_DIR}/geogrid.exe",
-            f"{WPS_BIN_DIR}/ungrib.exe",
-            f"{WPS_BIN_DIR}/metgrid.exe"
+    # 2. Compilation rules
+    use rule compile_wps from wrf_wps_compilation as compilation_exec_wps
+    use rule compile_wrf from wrf_wps_compilation as compilation_exec_wrf
 
-    use rule compile_wrf_via_eb from wrf_wps_compilation as compilation_exec_wrf with:
+    # 3. Software link rules
+    use rule create_wps_master_link from wrf_wps_compilation as compilation_link_wps with:
         output:
-            f"{WRF_BIN_DIR}/real.exe",
-            f"{WRF_BIN_DIR}/wrf.exe"
+            wps_ready = "audit/wps_link_ready.txt"
 
+    use rule create_wrf_master_link from wrf_wps_compilation as compilation_link_wrf with:
+        output:
+            wrf_ready = "audit/wrf_link_ready.txt"
+
+    # 4. Fill in the dependencies
     WPS_DEP = [
-        f"{WPS_BIN_DIR}/geogrid.exe",
-        f"{WPS_BIN_DIR}/ungrib.exe",
-        f"{WPS_BIN_DIR}/metgrid.exe"
+        "audit/wps_link_ready.txt"
     ]
     WRF_DEP = [
-        f"{WRF_BIN_DIR}/real.exe",
-        f"{WRF_BIN_DIR}/wrf.exe"
+        "audit/wrf_link_ready.txt"
     ]
+
+    # 5. Use/Load local modules
+    LOCAL_MODULES_PATH = os.path.abspath(".easybuild/modules/all")
+    USE_CMD = f"module use {quote(LOCAL_MODULES_PATH)};"
+else:
+    # When compilation is disabled
+    WPS_DEP = []
+    WRF_DEP = []
+    LOCAL_MODULES_PATH = os.path.abspath("/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/.easybuild/modules/all")
+    USE_CMD = f"module use {quote(LOCAL_MODULES_PATH)};"
+
 # ==============================================================================
 
+
+# Runtime Environments for WPS and WRF
+WRF_RUNTIME_ENV = (
+    f"set +u; "
+    f"source {EESSI_INIT}; "
+    f"module load EESSI-extend; "
+    f"{USE_CMD} "
+    f"module load WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}; "
+   # ALTAMIRA MPI (MPI_LAUNCHER: mpirun): f"module load WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}; export OMPI_MCA_btl=tcp,self,vader ; export OMPI_MCA_pml=ob1; "
+    f"set -u;"
+)
+
+WPS_RUNTIME_ENV = (
+    f"set +u; "
+    f"source {EESSI_INIT}; "
+    f"module load EESSI-extend; "
+    f"{USE_CMD} "
+    # ALTAMIRA MPI (MPI_LAUNCHER: mpirun): f"module load WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}; export OMPI_MCA_btl=tcp,self,vader ; export OMPI_MCA_pml=ob1; "
+    f"module load WPS/{WPS_VERSION}{TOOLCHAIN_SUFFIX}; "
+    f"set -u;"
+)
+
+
+# Creates the run_dir for each year and generates the namelist.wps file using jinja2 templating.
 rule namelist_wps:
     output:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "namelist.wps")
     params:
         geog_data_path=str(Path(config["geog_data_path"])),
-        geo_em_path=GEO_EM_PATH,
         namelist_wps=config["namelist_wps"],
-        GEOGRID_TBL=config["GEOGRID.TBL"],
-        wps_dir=WPS_INSTALL_DIR,
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
     shell:
         """
@@ -156,6 +189,7 @@ rule namelist_wps:
             -o namelist.wps
         """
 
+# Creates 'geo_em_path' folder and generates the 'namelist.wps' file for geogrid using jinja2 templating.
 rule namelist_wps_geogrid:
     output:
         str(Path(GEO_EM_PATH) / "namelist.wps")
@@ -189,6 +223,7 @@ rule namelist_input:
             -o namelist.input
         """
 
+# Download WPS geogrid data from 'geog_data_url' to 'geog_data_path' if not already present
 rule download_wps_geog:
     output:
         GEOG_DATA_INDEX
@@ -215,13 +250,15 @@ rule geogrid:
         nc   = str(Path(GEO_EM_PATH) / "geo_em.d01.nc")
     params:
         geo_em_path=GEO_EM_PATH,
-        namelist_wps=config["namelist_wps"],
-        GEOGRID_TBL=config["GEOGRID.TBL"],
+        GEOGRID_TBL=GEOGRID_TBL,
         wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
+        command=lambda wildcards, resources: launch_command(
+            Path(WPS_INSTALL_DIR) / "geogrid.exe", resources.tasks, resources.mpi
+        ),
     resources:
-        tasks= 2,
-        mpi= "mpirun",
+        tasks=GEOGRID_TASKS,
+        mpi=MPI_LAUNCHER if GEOGRID_TASKS > 1 else "",
     shell:
         """
         {params.runtime_env}
@@ -230,11 +267,12 @@ rule geogrid:
         mkdir -p geogrid
 
         ln -sf {params.wps_install_dir}/geogrid/{params.GEOGRID_TBL} geogrid/GEOGRID.TBL
-
-        {resources.mpi} -n {resources.tasks} geogrid.exe
+        
+        {params.command}
 
         test -s geo_em.d01.nc
-        touch {output}
+
+        touch {output.done}
         """
 
 rule download_ERA5:
@@ -263,23 +301,22 @@ rule ungrib:
     params:
         grib_dir=lambda wildcards: str(Path(GRIB_BASE_DIR) / ERA5_DOMAIN / wildcards.year),
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
-        VTable=config["Vtable"],
+        VTable=VTABLE,
         wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
     shell:
         """
         {params.runtime_env}
 
-        mkdir -p {params.run_dir}
         cd {params.run_dir}
 
         # Link GRIB files
-        {params.wps_install_dir}/link_grib.csh {params.grib_dir}/*.grib
+        csh {params.wps_install_dir}/link_grib.csh {params.grib_dir}/*.grib
 
         # Link Vtable
         ln -sf {params.wps_install_dir}/ungrib/Variable_Tables/{params.VTable} Vtable
 
-        ungrib.exe
+        {params.wps_install_dir}/ungrib.exe
 
         touch {output}
         """
@@ -294,12 +331,15 @@ rule metgrid:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "metgrid.done")
     params:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
-        METGRID_TBL=config["METGRID.TBL"],
+        METGRID_TBL=METGRID_TBL,
         wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
+        command=lambda wildcards, resources: launch_command(
+            Path(WPS_INSTALL_DIR) / "metgrid.exe", resources.tasks, resources.mpi
+        ),
     resources:
-        tasks= 2,
-        mpi= "mpirun",
+        tasks=METGRID_TASKS,
+        mpi=MPI_LAUNCHER if METGRID_TASKS > 1 else "",
     shell:
         """
         {params.runtime_env}
@@ -312,7 +352,7 @@ rule metgrid:
 
         ln -sf {params.wps_install_dir}/metgrid/{params.METGRID_TBL} metgrid/METGRID.TBL
 
-        {resources.mpi} -n {resources.tasks} metgrid.exe
+        {params.command}
 
         touch {output}
         """
@@ -327,10 +367,14 @@ rule real:
     params:
         year=lambda wildcards: wildcards.year,
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        wrf_install_dir=WRF_INSTALL_DIR,
         runtime_env=WRF_RUNTIME_ENV,
+        command=lambda wildcards, resources: launch_command(
+            Path(WRF_INSTALL_DIR) / "main/real.exe", resources.tasks, resources.mpi
+        ),
     resources:
-        tasks= 2,
-        mpi= "mpirun",
+        tasks=REAL_TASKS,
+        mpi=MPI_LAUNCHER if REAL_TASKS > 1 else "",
     shell:
         """
         {params.runtime_env}
@@ -338,7 +382,7 @@ rule real:
         echo "Running real for year {params.year} in {params.run_dir}"
         cd {params.run_dir}
 
-        {resources.mpi} -n {resources.tasks} real.exe
+        {params.command}
 
         touch {output}
         """
@@ -353,10 +397,15 @@ rule wrf:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
         wrf_run_dir=str(Path(WRF_INSTALL_DIR) / "run"),
         wrf_run_find_excludes=WRF_RUN_FIND_EXCLUDES,
+        wrf_install_dir=WRF_INSTALL_DIR,
         runtime_env=WRF_RUNTIME_ENV,
+        command=lambda wildcards, resources: launch_command(
+            Path(WRF_INSTALL_DIR) / "main/wrf.exe", resources.tasks, resources.mpi
+        ),
     resources:
-        tasks=2,
-        mpi="mpirun",
+        tasks=WRF_TASKS,
+        mpi=MPI_LAUNCHER if WRF_TASKS > 1 else "",
+        mem_mb=int(config.get("wrf_mem_mb", 32000)),
     shell:
         """
         {params.runtime_env}
@@ -369,8 +418,8 @@ rule wrf:
             {params.wrf_run_find_excludes} \
             -exec ln -sf {{}} . \\;
 
-        echo "{resources.mpi} -n {resources.tasks} wrf.exe"
-        {resources.mpi} -n {resources.tasks} wrf.exe
+        echo "Running wrf with {resources.tasks} task(s)"
+        {params.command}
 
         touch {output}
         """

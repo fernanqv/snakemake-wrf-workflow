@@ -5,30 +5,65 @@ era5_domain: "EUR"
 # Use 'repo_root_custom' to point to a location other than the repo's.
 # repo_root_custom: "/gpfs/projects/meteo/WORK/ASNA/projects/"
 
+# Use 'run_dir' to point to the location where ungrib, metgrid, real and wrf will be executed.
 run_dir: "run/{year}"
+
+# Folder where ERA5 data is stored. This folder should contain a subfolder for each domain, e.g. "EUR", "SAM", etc. 
 grib_basedir: "data/ERA5"
+# Folder where 
 geog_data_path: "data/WPS_GEOG_LOW_RES"
 geo_em_path: "data/geo_em/lowres/{era5_domain}"
 
 namelist_wps: "config/templates/toy_example/namelist.wps"
 namelist_input: "config/templates/toy_example/namelist.input"
 
+# External runtime env
 toolchain_suffix: "-foss-2024a-dmpar"
 eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
-
 wrf_version: "4.6.1"
 wps_version: "4.6.0"
-wps_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WPS"
-wrf_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core"
 
+wps_install_dir: "wrf_installation/WPS-4.6.0"
+wrf_install_dir: "wrf_installation/WRFV4.6.1"
+
+# geogrid
+GEOGRID_TBL: "GEOGRID.TBL.ARW"
+
+# ungrib
 Vtable: "Vtable.ERA-interim.pl"
-METGRID.TBL: "METGRID.TBL"
-GEOGRID.TBL: "GEOGRID.TBL.ARW"
+
+# metgrid
+METGRID_TBL: "METGRID.TBL"
+
 CAMtr_volume_mixing_ratio: "CAMtr_volume_mixing_ratio"
 
+mpi_launcher: "srun"
+geogrid_tasks: 2
+metgrid_tasks: 2
+real_tasks: 4
+wrf_tasks: 16
+wrf_mem_mb: 32000  # Total memory requested for the WRF job (MB).
+
+
+
 # WRF/WPS compilation
-enable_compilation: true  # enable/disable compilation
+enable_compilation: false  # enable/disable compilation
 compilation_repo: "orviz/snakemake-wrf-wps-compilation"
-compilation_version: "0.5.0"
+compilation_version: "0.6.0"
 compilation_config:
-  compiler: "intel"
+  wps_install_dir: "cordex-core/02_SAM12_evaluation/rundir/sWPS"
+  wrf_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core"
+
+  wrf_version: "4.6.1"
+  wps_version: "4.6.0"
+
+  installation_engine: "easybuild"
+  eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
+
+  easybuild:
+    toolchain_name: "foss" # toolchain name (e.g., foss, intel, etc.)
+    toolchain_version: "2024a" # toolchain version (e.g., 2024a, 2023b, etc.)
+    toolchain_type: "dmpar" # toolchain type (e.g., dmpar, serial, etc.)
+
+    wps_subdir: "software/WPS/{wps_version}-{toolchain_name}-{toolchain_version}-{toolchain_type}/WPS-{wps_version}"
+    wrf_subdir: "software/WRF/{wrf_version}-{toolchain_name}-{toolchain_version}-{toolchain_type}/WRFV{wrf_version}"
