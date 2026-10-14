@@ -1,7 +1,18 @@
-/data/
+# Snakemake local-generated files
+.snakemake/
+*.log
+
+# Ignore all confs but config/config.yaml
+config/*
+!config/config.yaml
+
+# Self-contained local simulation (and compilation) execution folders
+/src/
+/cordex-core/
+/audit/
 /eb/
 /run/
-/viejo/
+/data/
 
-# Ignore orktree del perfil específico
-config/profiles/altamira/
+# Profiles (Git Worktrees)
+config/profiles/
