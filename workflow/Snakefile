@@ -69,7 +69,7 @@ localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 # INTEGRATION WITH WRF/WPS COMPILATION MODULE
 # ==============================================================================
 COMPILATION_REPO    = config.get("compilation_repo", "orviz/snakemake-wrf-wps-compilation")
-COMPILATION_VERSION = config.get("compilation_version", "0.6.0-alpha2")
+COMPILATION_VERSION = config.get("compilation_version", "0.6.0")
 COMPILATION_ENABLED = config.get("enable_compilation", False)
 COMPILATION_CONFIG  = config.get("compilation_config", {})
 

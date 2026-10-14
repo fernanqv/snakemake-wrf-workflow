@@ -29,7 +29,7 @@ CAMtr_volume_mixing_ratio: "CAMtr_volume_mixing_ratio"
 # WRF/WPS compilation
 enable_compilation: true  # enable/disable compilation
 compilation_repo: "orviz/snakemake-wrf-wps-compilation"
-compilation_version: "0.6.0-alpha2"
+compilation_version: "0.6.0"
 compilation_config:
   wps_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WPS"
   wrf_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core"
