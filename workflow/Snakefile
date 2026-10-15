@@ -13,55 +13,62 @@ from shlex import quote
 
 REPO_ROOT = Path(config.get("repo_root_custom", Path.cwd()))
 PATH_KEYS = [
-    "grib_basedir", "run_dir", "geog_data_path", "geo_em_path","runtime_script",
-    "namelist_wps", "namelist_input", "wps_install_dir", "wrf_install_dir"
+    ("run_dir",),
+    ("ERA5", "grib_basedir"),
+    ("ERA5", "download_script"),
+    ("geog_data", "path"),
+    ("geog_data", "download_script"),
+    ("execution", "runtime_script"),
+    ("WPS", "install_dir"),
+    ("WPS", "namelist_template"),
+    ("WPS", "geogrid", "geo_em_path"),
+    ("WRF", "install_dir"),
+    ("WRF", "namelist_template"),
 ]
-for key in PATH_KEYS:
-    if key in config:
-        path_val = Path(config[key])
+for keys in PATH_KEYS:
+    section = config
+    for key in keys[:-1]:
+        section = section[key]
+    key = keys[-1]
+    if key in section:
+        path_val = Path(section[key])
         if not path_val.is_absolute():
-            config[key] = str(REPO_ROOT / path_val)
+            section[key] = str(REPO_ROOT / path_val)
 
 
 # Environment Initialization
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 
 # WPS and WRF 
-WRF_INSTALL_DIR = config["wrf_install_dir"]
-WPS_INSTALL_DIR = config["wps_install_dir"]
-MPI_LAUNCHER = config.get("mpi_launcher", "mpirun")
-WPS_RUNTIME_ENV = config.get("runtime_script")
-WRF_RUNTIME_ENV = config.get("runtime_script")
+WRF_INSTALL_DIR = config["WRF"]["install_dir"]
+WPS_INSTALL_DIR = config["WPS"]["install_dir"]
+MPI_LAUNCHER = config["execution"].get("mpi_launcher", "mpirun")
+WPS_RUNTIME_ENV = config["execution"].get("runtime_script")
+WRF_RUNTIME_ENV = config["execution"].get("runtime_script")
 
 # ERA5 settings
-ERA5_DOMAIN = config["era5_domain"]
-GRIB_BASE_DIR = config["grib_basedir"]
+ERA5_DOMAIN = config["ERA5"]["domain"]
+GRIB_BASE_DIR = config["ERA5"]["grib_basedir"]
 MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
 
 # GEOGRID
-GEO_EM_PATH = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
-GEOG_DATA_PATH = str(Path(config["geog_data_path"]))
-GEOG_DATA_URL = config.get(
-    "geog_data_url",
+GEO_EM_PATH = config["WPS"]["geogrid"]["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
+GEOG_DATA_PATH = str(Path(config["geog_data"]["path"]))
+GEOG_DATA_URL = config["geog_data"].get(
+    "url",
     "https://www2.mmm.ucar.edu/wrf/src/wps_files/geog_low_res_mandatory.tar.gz",
 )
 GEOG_DATA_INDEX = str(Path(GEOG_DATA_PATH) / "topo_gmted2010_5m" / "index")
-GEOGRID_TBL = config.get("GEOGRID_TBL", "GEOGRID.TBL.ARW")
-GEOGRID_TASKS = int(config.get("geogrid_tasks", 1))
+GEOGRID_TBL = config["WPS"]["geogrid"].get("table", "GEOGRID.TBL.ARW")
 
 # UNGRIB
-VTABLE = config.get("Vtable", "Vtable.ERA-interim.pl")
+VTABLE = config["WPS"].get("ungrib", {}).get("vtable", "Vtable.ERA-interim.pl")
 
 # METGRID
-METGRID_TBL = config.get("METGRID_TBL", "METGRID.TBL")
-METGRID_TASKS = int(config.get("metgrid_tasks", 1))
-
-# REAL
-REAL_TASKS = int(config.get("real_tasks", 1))
+METGRID_TBL = config["WPS"].get("metgrid", {}).get("table", "METGRID.TBL")
 
 # WRF
-WRF_TASKS = int(config.get("wrf_tasks", 1))
 WRF_RUN_EXCLUDE_PATTERNS = ["wrf*", "*.exe", "README*", "*rsl*", "namelist.*"]
 WRF_RUN_FIND_EXCLUDES = " ".join(
     f"! -name {quote(pattern)}" for pattern in WRF_RUN_EXCLUDE_PATTERNS
@@ -144,8 +151,8 @@ rule namelist_wps:
     output:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "namelist.wps")
     params:
-        geog_data_path=str(Path(config["geog_data_path"])),
-        namelist_wps=config["namelist_wps"],
+        geog_data_path=str(Path(config["geog_data"]["path"])),
+        namelist_wps=config["WPS"]["namelist_template"],
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
     shell:
         """
@@ -163,9 +170,9 @@ rule namelist_wps_geogrid:
     output:
         str(Path(GEO_EM_PATH) / "namelist.wps")
     params:
-        geog_data_path=str(Path(config["geog_data_path"])),
+        geog_data_path=str(Path(config["geog_data"]["path"])),
         geo_em_path=GEO_EM_PATH,
-        namelist_wps=config["namelist_wps"],
+        namelist_wps=config["WPS"]["namelist_template"],
     shell:
         """
         mkdir -p {params.geo_em_path}
@@ -180,8 +187,7 @@ rule namelist_input:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "namelist.input")
     params:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
-        namelist_input_template=str(Path(config["namelist_input"])),
-        # namelist_input_template=config["namelist_input"],
+        namelist_input_template=str(Path(config["WRF"]["namelist_template"])),
     shell:
         """
         mkdir -p {params.run_dir}
@@ -192,17 +198,18 @@ rule namelist_input:
             -o namelist.input
         """
 
-# Download WPS geogrid data from 'geog_data_url' to 'geog_data_path' if not already present
+# Download geographical data from geog_data.url to geog_data.path if missing
 rule download_wps_geog:
     output:
         GEOG_DATA_INDEX
     params:
+        download_script=config["geog_data"]["download_script"],
         url=GEOG_DATA_URL,
         target_dir=GEOG_DATA_PATH,
         required_file="topo_gmted2010_5m/index",
     shell:
         """
-        bash workflow/scripts/download_wps_geog.sh \
+        bash {params.download_script:q} \
             {params.url:q} \
             {params.target_dir:q} \
             {params.required_file:q}
@@ -226,10 +233,10 @@ rule geogrid:
             Path(WPS_INSTALL_DIR) / "geogrid.exe", resources.tasks, resources.mpi
         ),
     resources:
-        tasks=GEOGRID_TASKS,
+        tasks=int(config["WPS"].get("geogrid", {}).get("tasks", 1)),
         cpus_per_task=1,
-        mem_mb_per_cpu=int(config.get("geogrid_mem_mb_per_cpu", 2000)),
-        mpi=MPI_LAUNCHER if GEOGRID_TASKS > 1 else "",
+        mem_mb_per_cpu=int(config["WPS"].get("geogrid", {}).get("mem_mb_per_cpu", 2000)),
+        mpi=MPI_LAUNCHER if int(config["WPS"].get("geogrid", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
         source {params.runtime_env}
@@ -250,11 +257,12 @@ rule download_ERA5:
     output:
         f"{GRIB_BASE_DIR}/{{domain}}/{{year}}/ERA5-{{year}}{{month}}-{{filetype}}.grib"
     params:
+        download_script=config["ERA5"]["download_script"],
         data_dir=GRIB_BASE_DIR,
     shell:
         """
-        echo "Running: python workflow/scripts/ERA5/retrieve_era5_days4_6.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}"
-        python workflow/scripts/ERA5/retrieve_era5_days4_6.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}
+        echo "Running ERA5 download for {wildcards.year}-{wildcards.month} ({wildcards.filetype}, {wildcards.domain})"
+        python {params.download_script:q} {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir:q} {wildcards.domain}
         """
 
 rule ungrib:
@@ -278,7 +286,7 @@ rule ungrib:
     resources:
         tasks=1,
         cpus_per_task=1,
-        mem_mb_per_cpu=int(config.get("ungrib_mem_mb_per_cpu", 10000)),
+        mem_mb_per_cpu=int(config["WPS"].get("ungrib", {}).get("mem_mb_per_cpu", 10000)),
     shell:
         """
         source {params.runtime_env}
@@ -313,10 +321,10 @@ rule metgrid:
             Path(WPS_INSTALL_DIR) / "metgrid.exe", resources.tasks, resources.mpi
         ),
     resources:
-        tasks=METGRID_TASKS,
+        tasks=int(config["WPS"].get("metgrid", {}).get("tasks", 1)),
         cpus_per_task=1,
-        mem_mb_per_cpu=int(config.get("metgrid_mem_mb_per_cpu", 2000)),
-        mpi=MPI_LAUNCHER if METGRID_TASKS > 1 else "",
+        mem_mb_per_cpu=int(config["WPS"].get("metgrid", {}).get("mem_mb_per_cpu", 2000)),
+        mpi=MPI_LAUNCHER if int(config["WPS"].get("metgrid", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
         source {params.runtime_env}
@@ -350,10 +358,10 @@ rule real:
             Path(WRF_INSTALL_DIR) / "main/real.exe", resources.tasks, resources.mpi
         ),
     resources:
-        tasks=REAL_TASKS,
+        tasks=int(config["WRF"].get("real", {}).get("tasks", 1)),
         cpus_per_task=1,
-        mem_mb_per_cpu=int(config.get("real_mem_mb_per_cpu", 2000)),
-        mpi=MPI_LAUNCHER if REAL_TASKS > 1 else "",
+        mem_mb_per_cpu=int(config["WRF"].get("real", {}).get("mem_mb_per_cpu", 2000)),
+        mpi=MPI_LAUNCHER if int(config["WRF"].get("real", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
         source {params.runtime_env}
@@ -382,10 +390,10 @@ rule wrf:
             Path(WRF_INSTALL_DIR) / "main/wrf.exe", resources.tasks, resources.mpi
         ),
     resources:
-        tasks=WRF_TASKS,
+        tasks=int(config["WRF"].get("wrf", {}).get("tasks", 1)),
         cpus_per_task=1,
-        mpi=MPI_LAUNCHER if WRF_TASKS > 1 else "",
-        mem_mb_per_cpu=int(config.get("wrf_mem_mb_per_cpu", 2000)),
+        mpi=MPI_LAUNCHER if int(config["WRF"].get("wrf", {}).get("tasks", 1)) > 1 else "",
+        mem_mb_per_cpu=int(config["WRF"].get("wrf", {}).get("mem_mb_per_cpu", 2000)),
     shell:
         """
         source {params.runtime_env}
