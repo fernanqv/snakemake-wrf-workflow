@@ -2,7 +2,7 @@
 
 This repository contains a Snakemake workflow to run a WPS/WRF simulation.
 
-The main workflow is defined in `Snakefile`. It reads `config/config.yaml`, where
+The main workflow is defined in `workflow/Snakefile`. It reads `config/config.yaml`, where
 the run years, ERA5 domain, input/output directories, WPS/WRF installation paths,
 template namelists, and table names are configured. The Snakefile uses those
 values to build the WPS and WRF steps: namelist generation, geogrid, ERA5
@@ -16,40 +16,48 @@ The workflow features automated metadata generation for each workflow run levera
 Edit `config/config.yaml` before running the workflow. The most important values
 are:
 
-- `runs`: years to simulate.
-- `grib_basedir`: directory where ERA5 GRIB files are stored.
-- `run_dir`: per-year WRF run directory template.
-- `wps_install_dir` and `wrf_install_dir`: WPS and WRF installation directories.
-- `geog_data_path`: WPS geographical data directory.
-- `era5_domain`: ERA5 domain name.
-- `geo_em_path`: directory for geogrid outputs.
-- `namelist_wps` and `namelist_input`: Jinja2 namelist templates.
+- `runs`: years to simulate; `run_dir`: per-year directory template.
+- `ERA5.domain` and `ERA5.grib_basedir`: ERA5 domain and GRIB directory.
+- `geog_data.path` and `geog_data.url`: geographical data directory and download URL.
+- `ERA5.download_script` and `geog_data.download_script`: download scripts, with paths resolved like the other configured paths.
+- `execution.runtime_script` and `execution.mpi_launcher`: runtime environment and MPI launcher.
+- `WPS.install_dir` and `WRF.install_dir`: existing software installations.
+- `WPS.namelist_template` and `WRF.namelist_template`: Jinja2 namelist templates.
+- `WPS.geogrid`: `geo_em_path`, `table`, `tasks`, and `mem_mb_per_cpu`.
+- `WPS.ungrib`: `vtable` and `mem_mb_per_cpu` (always one task).
+- `WPS.metgrid`: `table`, `tasks`, and `mem_mb_per_cpu`.
+- `WRF.real` and `WRF.wrf`: `tasks` and `mem_mb_per_cpu`.
 
-### **Optional**: WPS/WRF Compilation
-
-The workflow can optionally orchestrate the download, audit, and compilation of the required WPS and WRF binaries via an integrated external Snakemake module utilizing EESSI software stacks.
-
-To enable automated compilation before running the simulation:
-
-1. In `config/config.yaml`, set `compile_software: true`.
-2. Configure the GitHub repository target, version tag, and EESSI compiler toolchain environment variables:
+For example, the WRF resources are configured as:
 
 ```yaml
-enable_compilation: true
-compilation_repo: "orviz/snakemake-wrf-wps-compilation"
-compilation_version: "0.4.0"
-
-compilation_config:
-  eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
-  wps_version: "4.6.0"
-  wrf_version: "4.6.1"
-  compiler: "intel"
-  toolchain_suffix: "-foss-2024a-dmpar"
+WRF:
+  install_dir: "wrf_installation/WRFV4.6.1"
+  namelist_template: "config/templates/toy_example/namelist.input"
+  real:
+    tasks: 4
+    mem_mb_per_cpu: 2000
+  wrf:
+    tasks: 16
+    mem_mb_per_cpu: 2000
 ```
 
-When active, the workflow automatically injects your local `wps_install_dir` and `wrf_install_dir` paths into the compilation module. The binaries (`ungrib.exe` and `wrf.exe`) will be built on-the-fly and deposited directly into those target installation folders as dynamic prerequisites before any WPS or WRF simulation rules are triggered.
+Each MPI task uses one CPU. Missing resource settings default to one task and
+2000 MB per CPU (10000 MB for ungrib). With one task, the executable runs directly;
+with multiple tasks, it uses the configured MPI launcher and `-n` task count.
 
-*Note: If `enable_compilation` is set to `false`, the workflow bypasses the external compilation module entirely and expects pre-existing binaries to be available at the configured installation paths.*
+Relative paths are resolved against `repo_root_custom`, or the working directory
+when omitted. The `{era5_domain}` placeholder in `WPS.geogrid.geo_em_path` is
+expanded using `ERA5.domain`; `{year}` in `run_dir` is expanded for each run.
+The previous flat configuration keys are no longer used.
+
+### WPS/WRF Compilation
+
+Keep `enable_compilation: false` and provide existing installations through
+`WPS.install_dir` and `WRF.install_dir`. Adapting the external compilation module
+to the nested configuration is pending. The existing `compilation_repo`,
+`compilation_version`, and `compilation_config` settings are retained for that
+future integration.
 
 ## Examples
 
@@ -58,7 +66,7 @@ is intended to be used with the `toy_example` templates in
 `config/templates/toy_example/`. This example runs a light WRF simulation over
 only a few days.
 
-The ERA5 helper `ERA5/retrieve_era5_days4_6.py` was created for the toy example
+The ERA5 helper `workflow/scripts/ERA5/retrieve_era5_days4_6.py` was created for the toy example
 to reduce the workflow runtime by downloading only the required days.
 
 ## Workflow Execution
@@ -136,6 +144,103 @@ git commit -m "Increase memory limits for WRF simulation"
 git push origin hpc-profiles
 ```
 
+## Advanced workflow management
+
+Run the following commands from the repository root, using the same configuration
+and working directory as the original execution. Direct `snakemake` commands
+require the workflow environment to be active (for example, via `pixi shell`).
+
+### Run all simulations through ungrib
+
+Set the simulation years in `config/config.yaml`:
+
+```yaml
+runs: [2000, 2001, 2002, 2003]
+```
+
+Use `--until ungrib` with the default workflow target to run through `ungrib`
+for all configured years, including the required dependencies. Snakemake stops
+before the downstream `metgrid`, `real`, and `wrf` steps.
+
+With Pixi:
+
+```bash
+# Preview the jobs
+pixi run run-local --until ungrib --cores 4 --dry-run
+
+# Execute locally
+pixi run run-local --until ungrib --cores 4
+```
+
+With Snakemake directly:
+
+```bash
+snakemake --until ungrib --cores 4 --dry-run
+snakemake --until ungrib --cores 4
+```
+
+For Slurm, use the HPC profile so that jobs receive the cluster settings and
+runtime environment:
+
+```bash
+pixi run hpc-profile altamira --until ungrib --jobs 15
+
+# Equivalent direct execution in an active workflow environment
+source config/profiles/altamira/set_env.sh
+snakemake --profile config/profiles/altamira --until ungrib --jobs 15
+```
+
+To continue through WRF later, repeat the appropriate execution command without
+`--until ungrib`. Snakemake reuses up-to-date results. The configured years do
+not imply full-year ERA5 coverage: the current Snakefile requests November,
+and the default toy-example download script retrieves only days 4–6.
+
+### Monitor an execution from another terminal
+
+Snakemake's `--summary` displays output files, their status, and whether they
+need to be created or updated. It inspects files and metadata; it does not
+connect to the running scheduler or show live job progress.
+
+```bash
+# With Pixi
+pixi run snakemake --summary --nolock
+
+# With Snakemake directly
+snakemake --summary --nolock
+
+# Refresh the summary every 10 seconds
+watch -n 10 'pixi run snakemake --summary --nolock'
+```
+
+Use `--detailed-summary` instead of `--summary` to include input files and shell
+commands. Add `--until ungrib` to restrict the summary to the same execution
+scope. Files being written may still be incomplete, so this summary is not a
+count of successfully completed jobs. `--nolock` lets this inspection avoid
+locking the working directory; use it here only for inspection.
+
+For live progress messages, completed-job counts, and errors, follow the log
+of the running execution. This command selects the most recent Snakemake log;
+select the specific log path instead if several executions are present:
+
+```bash
+tail -n 50 -f "$(ls -t .snakemake/log/*.snakemake.log | head -n 1)"
+```
+
+Press `Ctrl+C` to stop following the log without stopping the workflow.
+
+For Slurm executions, inspect queued and running jobs separately:
+
+```bash
+watch -n 5 "squeue -u $USER"
+```
+
+`PD` means pending and `R` means running. The bundled HPC profiles store job
+logs under `logs/slurm/`. Snakemake has no built-in `snakemake status` command
+that attaches to an already running execution.
+
+See the [Snakemake command-line documentation](https://snakemake.readthedocs.io/en/stable/executing/cli.html)
+for the summary and execution options.
+
 ## DAG
 
 The workflow DAG is shown below. The repository also includes the PDF version in
@@ -160,10 +265,10 @@ snakemake --dag | dot -Tpng > dag.png
   the user. For example, `GEOGRID.TBL` and `METGRID.TBL` are provided by the
   user, but `Vtable` is created by default. The user can provide a custom
   `Vtable` if desired.
-- Download `geog_data_path` from
+- Download `geog_data.path` from
   https://www2.mmm.ucar.edu/wrf/site/access_code/geog_data.html if it is not
   available.
-- Improve `ERA5/retrieve_era5.py` to support days as an argument. Decide how to
+- Improve `workflow/scripts/ERA5/retrieve_era5.py` to support days as an argument. Decide how to
   handle this in the Snakefile.
 - Ask Josipa if it would be possible to clean the WRF/run template folder.
   Decide how to deal with the excludes:
