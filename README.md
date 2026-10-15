@@ -58,7 +58,7 @@ is intended to be used with the `toy_example` templates in
 `config/templates/toy_example/`. This example runs a light WRF simulation over
 only a few days.
 
-The ERA5 helper `ERA5/retrieve_era5_days4_6.py` was created for the toy example
+The ERA5 helper `workflow/scripts/ERA5/retrieve_era5_days4_6.py` was created for the toy example
 to reduce the workflow runtime by downloading only the required days.
 
 ## Workflow Execution
@@ -163,7 +163,7 @@ snakemake --dag | dot -Tpng > dag.png
 - Download `geog_data_path` from
   https://www2.mmm.ucar.edu/wrf/site/access_code/geog_data.html if it is not
   available.
-- Improve `ERA5/retrieve_era5.py` to support days as an argument. Decide how to
+- Improve `workflow/scripts/ERA5/retrieve_era5.py` to support days as an argument. Decide how to
   handle this in the Snakefile.
 - Ask Josipa if it would be possible to clean the WRF/run template folder.
   Decide how to deal with the excludes:

@@ -1,5 +1,5 @@
-runs:
-  - 2000
+runs: 
+ - 2000
 era5_domain: "EUR"
 
 # Use 'repo_root_custom' to point to a location other than the repo's.
@@ -8,48 +8,55 @@ era5_domain: "EUR"
 # Use 'run_dir' to point to the location where ungrib, metgrid, real and wrf will be executed.
 run_dir: "run/{year}"
 
+# ERA5 data settings
 # Folder where ERA5 data is stored. This folder should contain a subfolder for each domain, e.g. "EUR", "SAM", etc. 
 grib_basedir: "data/ERA5"
-# Folder where 
-geog_data_path: "data/WPS_GEOG_LOW_RES"
-geo_em_path: "data/geo_em/lowres/{era5_domain}"
 
+# Namelist templates
 namelist_wps: "config/templates/toy_example/namelist.wps"
 namelist_input: "config/templates/toy_example/namelist.input"
 
 # External runtime env
-toolchain_suffix: "-foss-2024a-dmpar"
-eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
-wrf_version: "4.6.1"
-wps_version: "4.6.0"
+runtime_script: "config/profiles/tresmares/set_env.sh"
 
+# WPS and WRF installation directories
 wps_install_dir: "wrf_installation/WPS-4.6.0"
 wrf_install_dir: "wrf_installation/WRFV4.6.1"
 
-# geogrid
+# MPI settings
+mpi_launcher: "srun"
+
+# GEOGRID settings
+# Folder where 
+geog_data_path: "data/WPS_GEOG_LOW_RES"
+geo_em_path: "data/geo_em/lowres/{era5_domain}"
 GEOGRID_TBL: "GEOGRID.TBL.ARW"
+geogrid_tasks: 2
+geogrid_mem_mb_per_cpu: 2000  # Memory per CPU (MB); one CPU per MPI task.
 
 # ungrib
 Vtable: "Vtable.ERA-interim.pl"
+ungrib_mem_mb_per_cpu: 10000  # Memory for the single CPU (MB).
 
 # metgrid
 METGRID_TBL: "METGRID.TBL"
-
-CAMtr_volume_mixing_ratio: "CAMtr_volume_mixing_ratio"
-
-mpi_launcher: "srun"
-geogrid_tasks: 2
 metgrid_tasks: 2
+
+# real
 real_tasks: 4
+real_mem_mb_per_cpu: 2000  # Memory per CPU (MB); 4 tasks request 8000 MB in total.
+
+# wrf
 wrf_tasks: 16
-wrf_mem_mb: 32000  # Total memory requested for the WRF job (MB).
+wrf_mem_mb_per_cpu: 2000  # Memory per CPU (MB); 16 tasks request 32000 MB in total.
+
 
 # WRF/WPS compilation
 enable_compilation: false  # enable/disable compilation
 compilation_repo: "orviz/snakemake-wrf-wps-compilation"
 compilation_version: "0.6.0"
 compilation_config:
-  wps_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WPS"
+  wps_install_dir: "cordex-core/02_SAM12_evaluation/rundir/sWPS"
   wrf_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core"
 
   wrf_version: "4.6.1"

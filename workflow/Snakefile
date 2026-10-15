@@ -13,7 +13,7 @@ from shlex import quote
 
 REPO_ROOT = Path(config.get("repo_root_custom", Path.cwd()))
 PATH_KEYS = [
-    "grib_basedir", "run_dir", "geog_data_path", "geo_em_path",
+    "grib_basedir", "run_dir", "geog_data_path", "geo_em_path","runtime_script",
     "namelist_wps", "namelist_input", "wps_install_dir", "wrf_install_dir"
 ]
 for key in PATH_KEYS:
@@ -22,29 +22,24 @@ for key in PATH_KEYS:
         if not path_val.is_absolute():
             config[key] = str(REPO_ROOT / path_val)
 
-ERA5_DOMAIN = config["era5_domain"]
-config["geo_em_path"] = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
 
 # Environment Initialization
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
-GRIB_BASE_DIR = config["grib_basedir"]
-GEO_EM_PATH = config["geo_em_path"]
 
-# External runtime env 
-#TODO: Do we need to define these 3 variables here? 
-WPS_VERSION = config["wps_version"]
-WRF_VERSION = config["wrf_version"]
-TOOLCHAIN_SUFFIX = config.get("toolchain_suffix")
-EESSI_INIT = quote(config["eessi_init_script"])
-
+# WPS and WRF 
 WRF_INSTALL_DIR = config["wrf_install_dir"]
 WPS_INSTALL_DIR = config["wps_install_dir"]
+MPI_LAUNCHER = config.get("mpi_launcher", "mpirun")
+WPS_RUNTIME_ENV = config.get("runtime_script")
+WRF_RUNTIME_ENV = config.get("runtime_script")
 
-# EESSI
-EESSI_INIT = quote(config["eessi_init_script"])
-
+# ERA5 settings
+ERA5_DOMAIN = config["era5_domain"]
+GRIB_BASE_DIR = config["grib_basedir"]
 MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
+
+# GEOGRID
 GEO_EM_PATH = config["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
 GEOG_DATA_PATH = str(Path(config["geog_data_path"]))
 GEOG_DATA_URL = config.get(
@@ -52,12 +47,6 @@ GEOG_DATA_URL = config.get(
     "https://www2.mmm.ucar.edu/wrf/src/wps_files/geog_low_res_mandatory.tar.gz",
 )
 GEOG_DATA_INDEX = str(Path(GEOG_DATA_PATH) / "topo_gmted2010_5m" / "index")
-WRF_RUN_EXCLUDE_PATTERNS = ["wrf*", "*.exe", "README*", "*rsl*", "namelist.*"]
-WRF_RUN_FIND_EXCLUDES = " ".join(
-    f"! -name {quote(pattern)}" for pattern in WRF_RUN_EXCLUDE_PATTERNS
-)
-
-# GEOGRID
 GEOGRID_TBL = config.get("GEOGRID_TBL", "GEOGRID.TBL.ARW")
 GEOGRID_TASKS = int(config.get("geogrid_tasks", 1))
 
@@ -73,9 +62,10 @@ REAL_TASKS = int(config.get("real_tasks", 1))
 
 # WRF
 WRF_TASKS = int(config.get("wrf_tasks", 1))
-
-# MPI settings:
-MPI_LAUNCHER = config.get("mpi_launcher", "mpirun")
+WRF_RUN_EXCLUDE_PATTERNS = ["wrf*", "*.exe", "README*", "*rsl*", "namelist.*"]
+WRF_RUN_FIND_EXCLUDES = " ".join(
+    f"! -name {quote(pattern)}" for pattern in WRF_RUN_EXCLUDE_PATTERNS
+)
 
 
 def launch_command(executable, tasks, mpi):
@@ -143,30 +133,10 @@ else:
     # When compilation is disabled
     WPS_DEP = []
     WRF_DEP = []
-    USE_CMD = ""
+    LOCAL_MODULES_PATH = os.path.abspath("/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/.easybuild/modules/all")
+    USE_CMD = f"module use {quote(LOCAL_MODULES_PATH)};"
 
 # ==============================================================================
-
-# Runtime Environments for WPS and WRF
-WRF_RUNTIME_ENV = (
-    f"set +u; "
-    f"source {EESSI_INIT}; "
-    f"module load EESSI-extend; "
-    f"{USE_CMD} "
-    f"module load WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}; "
-    # ALTAMIRA MPI (MPI_LAUNCHER: mpirun): f"module load WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}; export OMPI_MCA_btl=tcp,self,vader ; export OMPI_MCA_pml=ob1; "
-    f"set -u;"
-)
-
-WPS_RUNTIME_ENV = (
-    f"set +u; "
-    f"source {EESSI_INIT}; "
-    f"module load EESSI-extend; "
-    f"{USE_CMD} "
-    # ALTAMIRA MPI (MPI_LAUNCHER: mpirun): f"module load WRF/{WRF_VERSION}{TOOLCHAIN_SUFFIX}; export OMPI_MCA_btl=tcp,self,vader ; export OMPI_MCA_pml=ob1; "
-    f"module load WPS/{WPS_VERSION}{TOOLCHAIN_SUFFIX}; "
-    f"set -u;"
-)
 
 
 # Creates the run_dir for each year and generates the namelist.wps file using jinja2 templating.
@@ -257,10 +227,12 @@ rule geogrid:
         ),
     resources:
         tasks=GEOGRID_TASKS,
+        cpus_per_task=1,
+        mem_mb_per_cpu=int(config.get("geogrid_mem_mb_per_cpu", 2000)),
         mpi=MPI_LAUNCHER if GEOGRID_TASKS > 1 else "",
     shell:
         """
-        {params.runtime_env}
+        source {params.runtime_env}
 
         cd {params.geo_em_path}
         mkdir -p geogrid
@@ -281,8 +253,8 @@ rule download_ERA5:
         data_dir=GRIB_BASE_DIR,
     shell:
         """
-        echo "Running: python ERA5/retrieve_era5.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}"
-        python ERA5/retrieve_era5_days4_6.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}
+        echo "Running: python workflow/scripts/ERA5/retrieve_era5_days4_6.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}"
+        python workflow/scripts/ERA5/retrieve_era5_days4_6.py {wildcards.year} {wildcards.month} {wildcards.filetype} {params.data_dir} {wildcards.domain}
         """
 
 rule ungrib:
@@ -303,9 +275,13 @@ rule ungrib:
         VTable=VTABLE,
         wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
+    resources:
+        tasks=1,
+        cpus_per_task=1,
+        mem_mb_per_cpu=int(config.get("ungrib_mem_mb_per_cpu", 10000)),
     shell:
         """
-        {params.runtime_env}
+        source {params.runtime_env}
 
         cd {params.run_dir}
 
@@ -338,10 +314,12 @@ rule metgrid:
         ),
     resources:
         tasks=METGRID_TASKS,
+        cpus_per_task=1,
+        mem_mb_per_cpu=int(config.get("metgrid_mem_mb_per_cpu", 2000)),
         mpi=MPI_LAUNCHER if METGRID_TASKS > 1 else "",
     shell:
         """
-        {params.runtime_env}
+        source {params.runtime_env}
 
         echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
         cd {params.run_dir}
@@ -366,16 +344,19 @@ rule real:
     params:
         year=lambda wildcards: wildcards.year,
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        wrf_install_dir=WRF_INSTALL_DIR,
         runtime_env=WRF_RUNTIME_ENV,
         command=lambda wildcards, resources: launch_command(
             Path(WRF_INSTALL_DIR) / "main/real.exe", resources.tasks, resources.mpi
         ),
     resources:
         tasks=REAL_TASKS,
+        cpus_per_task=1,
+        mem_mb_per_cpu=int(config.get("real_mem_mb_per_cpu", 2000)),
         mpi=MPI_LAUNCHER if REAL_TASKS > 1 else "",
     shell:
         """
-        {params.runtime_env}
+        source {params.runtime_env}
 
         echo "Running real for year {params.year} in {params.run_dir}"
         cd {params.run_dir}
@@ -395,17 +376,19 @@ rule wrf:
         run_dir=lambda wildcards: get_run_dir(wildcards.year),
         wrf_run_dir=str(Path(WRF_INSTALL_DIR) / "run"),
         wrf_run_find_excludes=WRF_RUN_FIND_EXCLUDES,
+        wrf_install_dir=WRF_INSTALL_DIR,
         runtime_env=WRF_RUNTIME_ENV,
         command=lambda wildcards, resources: launch_command(
             Path(WRF_INSTALL_DIR) / "main/wrf.exe", resources.tasks, resources.mpi
         ),
     resources:
         tasks=WRF_TASKS,
+        cpus_per_task=1,
         mpi=MPI_LAUNCHER if WRF_TASKS > 1 else "",
-        mem_mb=int(config.get("wrf_mem_mb", 32000)),
+        mem_mb_per_cpu=int(config.get("wrf_mem_mb_per_cpu", 2000)),
     shell:
         """
-        {params.runtime_env}
+        source {params.runtime_env}
 
         echo "Running wrf for year {wildcards.year} in {params.run_dir}"
         mkdir -p {params.run_dir}
