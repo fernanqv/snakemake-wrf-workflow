@@ -144,6 +144,103 @@ git commit -m "Increase memory limits for WRF simulation"
 git push origin hpc-profiles
 ```
 
+## Advanced workflow management
+
+Run the following commands from the repository root, using the same configuration
+and working directory as the original execution. Direct `snakemake` commands
+require the workflow environment to be active (for example, via `pixi shell`).
+
+### Run all simulations through ungrib
+
+Set the simulation years in `config/config.yaml`:
+
+```yaml
+runs: [2000, 2001, 2002, 2003]
+```
+
+Use `--until ungrib` with the default workflow target to run through `ungrib`
+for all configured years, including the required dependencies. Snakemake stops
+before the downstream `metgrid`, `real`, and `wrf` steps.
+
+With Pixi:
+
+```bash
+# Preview the jobs
+pixi run run-local --until ungrib --cores 4 --dry-run
+
+# Execute locally
+pixi run run-local --until ungrib --cores 4
+```
+
+With Snakemake directly:
+
+```bash
+snakemake --until ungrib --cores 4 --dry-run
+snakemake --until ungrib --cores 4
+```
+
+For Slurm, use the HPC profile so that jobs receive the cluster settings and
+runtime environment:
+
+```bash
+pixi run hpc-profile altamira --until ungrib --jobs 15
+
+# Equivalent direct execution in an active workflow environment
+source config/profiles/altamira/set_env.sh
+snakemake --profile config/profiles/altamira --until ungrib --jobs 15
+```
+
+To continue through WRF later, repeat the appropriate execution command without
+`--until ungrib`. Snakemake reuses up-to-date results. The configured years do
+not imply full-year ERA5 coverage: the current Snakefile requests November,
+and the default toy-example download script retrieves only days 4–6.
+
+### Monitor an execution from another terminal
+
+Snakemake's `--summary` displays output files, their status, and whether they
+need to be created or updated. It inspects files and metadata; it does not
+connect to the running scheduler or show live job progress.
+
+```bash
+# With Pixi
+pixi run snakemake --summary --nolock
+
+# With Snakemake directly
+snakemake --summary --nolock
+
+# Refresh the summary every 10 seconds
+watch -n 10 'pixi run snakemake --summary --nolock'
+```
+
+Use `--detailed-summary` instead of `--summary` to include input files and shell
+commands. Add `--until ungrib` to restrict the summary to the same execution
+scope. Files being written may still be incomplete, so this summary is not a
+count of successfully completed jobs. `--nolock` lets this inspection avoid
+locking the working directory; use it here only for inspection.
+
+For live progress messages, completed-job counts, and errors, follow the log
+of the running execution. This command selects the most recent Snakemake log;
+select the specific log path instead if several executions are present:
+
+```bash
+tail -n 50 -f "$(ls -t .snakemake/log/*.snakemake.log | head -n 1)"
+```
+
+Press `Ctrl+C` to stop following the log without stopping the workflow.
+
+For Slurm executions, inspect queued and running jobs separately:
+
+```bash
+watch -n 5 "squeue -u $USER"
+```
+
+`PD` means pending and `R` means running. The bundled HPC profiles store job
+logs under `logs/slurm/`. Snakemake has no built-in `snakemake status` command
+that attaches to an already running execution.
+
+See the [Snakemake command-line documentation](https://snakemake.readthedocs.io/en/stable/executing/cli.html)
+for the summary and execution options.
+
 ## DAG
 
 The workflow DAG is shown below. The repository also includes the PDF version in
