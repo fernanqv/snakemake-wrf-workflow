@@ -39,7 +39,7 @@ for keys in PATH_KEYS:
 # Environment Initialization
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 
-# WPS and WRF 
+# WPS and WRF
 WRF_INSTALL_DIR = config["WRF"]["install_dir"]
 WPS_INSTALL_DIR = config["WPS"]["install_dir"]
 MPI_LAUNCHER = config["execution"].get("mpi_launcher", "mpirun")
@@ -132,16 +132,10 @@ if COMPILATION_ENABLED:
     WRF_DEP = [
         "audit/wrf_link_ready.txt"
     ]
-
-    # 5. Use/Load local modules
-    LOCAL_MODULES_PATH = os.path.abspath(".easybuild/modules/all")
-    USE_CMD = f"module use {quote(LOCAL_MODULES_PATH)};"
 else:
     # When compilation is disabled
     WPS_DEP = []
     WRF_DEP = []
-    LOCAL_MODULES_PATH = os.path.abspath("/nfs/home/gmeteo/valva/repos/snakemake-wrf-workflow/.easybuild/modules/all")
-    USE_CMD = f"module use {quote(LOCAL_MODULES_PATH)};"
 
 # ==============================================================================
 
@@ -245,7 +239,7 @@ rule geogrid:
         mkdir -p geogrid
 
         ln -sf {params.wps_install_dir}/geogrid/{params.GEOGRID_TBL} geogrid/GEOGRID.TBL
-        
+
         {params.command}
 
         test -s geo_em.d01.nc
