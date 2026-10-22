@@ -18,7 +18,6 @@ PATH_KEYS = [
     ("ERA5", "download_script"),
     ("geog_data", "path"),
     ("geog_data", "download_script"),
-    ("execution", "runtime_script"),
     ("WPS", "install_dir"),
     ("WPS", "namelist_template"),
     ("WPS", "geogrid", "geo_em_path"),
@@ -35,6 +34,16 @@ for keys in PATH_KEYS:
         if not path_val.is_absolute():
             section[key] = str(REPO_ROOT / path_val)
 
+# Profile management
+ACTIVE_PROFILE = workflow.profile
+if ACTIVE_PROFILE:
+    if not os.path.isabs(ACTIVE_PROFILE) and not ACTIVE_PROFILE.startswith("."):
+        PROFILE_DIR = Path("config/profiles") / ACTIVE_PROFILE
+    else:
+        PROFILE_DIR = Path(ACTIVE_PROFILE)
+else:
+    # Fallback when --profile is not specified: 'local' profile will always exist
+    PROFILE_DIR = Path("config/profiles/local")
 
 # Environment Initialization
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
@@ -43,8 +52,10 @@ RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 WRF_INSTALL_DIR = config["WRF"]["install_dir"]
 WPS_INSTALL_DIR = config["WPS"]["install_dir"]
 MPI_LAUNCHER = config["execution"].get("mpi_launcher", "mpirun")
-WPS_RUNTIME_ENV = config["execution"].get("runtime_script")
-WRF_RUNTIME_ENV = config["execution"].get("runtime_script")
+
+ENV_SCRIPT_PATH = str(REPO_ROOT / PROFILE_DIR / "set_env.sh")
+WPS_RUNTIME_ENV = ENV_SCRIPT_PATH
+WRF_RUNTIME_ENV = ENV_SCRIPT_PATH
 
 # ERA5 settings
 ERA5_DOMAIN = config["ERA5"]["domain"]

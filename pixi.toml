@@ -33,11 +33,10 @@ run-rocrate = "snakemake --cores all --workflow-profile ro-crate"
 run-slurm  = "snakemake --profile"
 
 # HPC profiles
-hpc-profile = "PROFILE=$1; PROFILE_DIR=\"config/profiles/$PROFILE\"; ENV_SCRIPT=\"$PROFILE_DIR/set_env.sh\"; if [ -d \"$PROFILE_DIR\" ]; then if [ -f \"$ENV_SCRIPT\" ]; then source \"$ENV_SCRIPT\"; fi && snakemake --profile \"$PROFILE_DIR\" \"${@:2}\"; else echo \"Error: HPC profile '$PROFILE' not found under config/profiles/\"; exit 1; fi"
+hpc-profile = "snakemake --profile $1"
 
 [pypi-dependencies]
 jinja2-shell = ">=0.1.4, <0.2"
 jinja2-cli = ">=1.0.1, <2"
 cdsapi = "*"
 snakemake-report-plugin-rocrate = { git = "https://github.com/snakemake/snakemake-report-plugin-rocrate.git" }
-
