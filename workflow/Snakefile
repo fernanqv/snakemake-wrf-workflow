@@ -39,7 +39,7 @@ for keys in PATH_KEYS:
 # Environment Initialization
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 
-# WPS and WRF 
+# WPS and WRF
 WRF_INSTALL_DIR = config["WRF"]["install_dir"]
 WPS_INSTALL_DIR = config["WPS"]["install_dir"]
 MPI_LAUNCHER = config["execution"].get("mpi_launcher", "mpirun")
@@ -102,6 +102,9 @@ COMPILATION_REPO    = config.get("compilation_repo", "orviz/snakemake-wrf-wps-co
 COMPILATION_VERSION = config.get("compilation_version", "0.6.0")
 COMPILATION_ENABLED = config.get("enable_compilation", False)
 COMPILATION_CONFIG  = config.get("compilation_config", {})
+
+COMPILATION_CONFIG["wps_install_dir"] = WPS_INSTALL_DIR
+COMPILATION_CONFIG["wrf_install_dir"] = WRF_INSTALL_DIR
 
 module wrf_wps_compilation:
     snakefile: f"gh:{COMPILATION_REPO}@{COMPILATION_VERSION}:workflow/Snakefile"
@@ -245,7 +248,7 @@ rule geogrid:
         mkdir -p geogrid
 
         ln -sf {params.wps_install_dir}/geogrid/{params.GEOGRID_TBL} geogrid/GEOGRID.TBL
-        
+
         {params.command}
 
         test -s geo_em.d01.nc
