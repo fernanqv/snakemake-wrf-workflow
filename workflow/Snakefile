@@ -35,15 +35,7 @@ for keys in PATH_KEYS:
             section[key] = str(REPO_ROOT / path_val)
 
 # Profile management
-ACTIVE_PROFILE = workflow.profile
-if ACTIVE_PROFILE:
-    if not os.path.isabs(ACTIVE_PROFILE) and not ACTIVE_PROFILE.startswith("."):
-        PROFILE_DIR = Path("config/profiles") / ACTIVE_PROFILE
-    else:
-        PROFILE_DIR = Path(ACTIVE_PROFILE)
-else:
-    # Fallback when --profile is not specified: 'local' profile will always exist
-    PROFILE_DIR = Path("config/profiles/local")
+PROFILE_DIR = getattr(workflow.execution_settings, "profile", "config/profiles/local")
 
 # Environment Initialization
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
@@ -51,11 +43,27 @@ RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 # WPS and WRF
 WRF_INSTALL_DIR = config["WRF"]["install_dir"]
 WPS_INSTALL_DIR = config["WPS"]["install_dir"]
-MPI_LAUNCHER = config["execution"].get("mpi_launcher", "mpirun")
+MPI_LAUNCHER    = config["execution"].get("mpi_launcher", "mpirun")
+
+# Profile's runtime environment
+LOCAL_MODULES_PATH = config.get("local_modules_path", "")
+WRF_VERSION        = config.get("wrf_version", "4.6.1")
+WPS_VERSION        = config.get("wps_version", "4.6.0")
+TOOLCHAIN_SUFFIX   = config.get("toolchain_suffix", "-foss-2024a-dmpar")
 
 ENV_SCRIPT_PATH = str(REPO_ROOT / PROFILE_DIR / "set_env.sh")
-WPS_RUNTIME_ENV = ENV_SCRIPT_PATH
-WRF_RUNTIME_ENV = ENV_SCRIPT_PATH
+WPS_RUNTIME_ENV = (
+    f"export LOCAL_MODULES_PATH='{LOCAL_MODULES_PATH}'; "
+    f"export WPS_VERSION='{WPS_VERSION}'; "
+    f"export TOOLCHAIN_SUFFIX='{TOOLCHAIN_SUFFIX}'; "
+    f"source '{ENV_SCRIPT_PATH}'; "
+)
+WRF_RUNTIME_ENV = (
+    f"export LOCAL_MODULES_PATH='{LOCAL_MODULES_PATH}'; "
+    f"export WRF_VERSION='{WRF_VERSION}'; "
+    f"export TOOLCHAIN_SUFFIX='{TOOLCHAIN_SUFFIX}'; "
+    f"source '{ENV_SCRIPT_PATH}'; "
+)
 
 # ERA5 settings
 ERA5_DOMAIN = config["ERA5"]["domain"]
