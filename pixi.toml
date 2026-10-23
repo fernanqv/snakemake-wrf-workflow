@@ -25,15 +25,14 @@ rich = "<14"
 
 [tasks]
 # Local
-dry-run     = "snakemake --dry-run --profile"
-run-local   = "snakemake --cores all"
+dry-run     = "snakemake --dry-run --profile config/profiles/local"
+run-local   = "snakemake --cores all --profile config/profiles/local"
 run-rocrate = "snakemake --cores all --workflow-profile ro-crate"
 
-# Generic Slurm
-run-slurm  = "snakemake --profile"
-
 # HPC profiles
-hpc-profile = "snakemake --profile $1"
+[tasks.hpc-profile]
+args = ["cluster"]
+cmd = "snakemake --profile config/profiles/{{ cluster }}"
 
 [pypi-dependencies]
 jinja2-shell = ">=0.1.4, <0.2"
