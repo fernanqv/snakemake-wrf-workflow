@@ -255,7 +255,7 @@ rule geogrid:
         mpi=MPI_LAUNCHER if int(config["WPS"].get("geogrid", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         cd {params.geo_em_path}
         mkdir -p geogrid
@@ -305,7 +305,7 @@ rule ungrib:
         mem_mb_per_cpu=int(config["WPS"].get("ungrib", {}).get("mem_mb_per_cpu", 10000)),
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         cd {params.run_dir}
 
@@ -343,7 +343,7 @@ rule metgrid:
         mpi=MPI_LAUNCHER if int(config["WPS"].get("metgrid", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
         cd {params.run_dir}
@@ -380,7 +380,7 @@ rule real:
         mpi=MPI_LAUNCHER if int(config["WRF"].get("real", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         echo "Running real for year {params.year} in {params.run_dir}"
         cd {params.run_dir}
@@ -412,7 +412,7 @@ rule wrf:
         mem_mb_per_cpu=int(config["WRF"].get("wrf", {}).get("mem_mb_per_cpu", 2000)),
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         echo "Running wrf for year {wildcards.year} in {params.run_dir}"
         mkdir -p {params.run_dir}
