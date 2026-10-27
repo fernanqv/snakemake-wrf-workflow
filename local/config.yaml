@@ -1,0 +1,10 @@
+cores: 4
+jobs: 1
+latency-wait: 60
+
+# set_env.sh variables
+config:
+  local_modules_path: ".easybuild/modules/all"
+  wrf_version: "4.6.1"
+  wps_version: "4.6.0"
+  toolchain_suffix: "-foss-2024a-dmpar"
