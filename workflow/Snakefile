@@ -18,7 +18,6 @@ PATH_KEYS = [
     ("ERA5", "download_script"),
     ("geog_data", "path"),
     ("geog_data", "download_script"),
-    ("execution", "runtime_script"),
     ("WPS", "install_dir"),
     ("WPS", "namelist_template"),
     ("WPS", "geogrid", "geo_em_path"),
@@ -35,6 +34,8 @@ for keys in PATH_KEYS:
         if not path_val.is_absolute():
             section[key] = str(REPO_ROOT / path_val)
 
+# Profile management
+PROFILE_DIR = getattr(workflow.execution_settings, "profile", "config/profiles/local")
 
 # Environment Initialization
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
@@ -42,9 +43,27 @@ RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 # WPS and WRF
 WRF_INSTALL_DIR = config["WRF"]["install_dir"]
 WPS_INSTALL_DIR = config["WPS"]["install_dir"]
-MPI_LAUNCHER = config["execution"].get("mpi_launcher", "mpirun")
-WPS_RUNTIME_ENV = config["execution"].get("runtime_script")
-WRF_RUNTIME_ENV = config["execution"].get("runtime_script")
+MPI_LAUNCHER    = config["execution"].get("mpi_launcher", "mpirun")
+
+# Profile's runtime environment
+LOCAL_MODULES_PATH = config.get("local_modules_path", "")
+WRF_VERSION        = config.get("wrf_version", "4.6.1")
+WPS_VERSION        = config.get("wps_version", "4.6.0")
+TOOLCHAIN_SUFFIX   = config.get("toolchain_suffix", "-foss-2024a-dmpar")
+
+ENV_SCRIPT_PATH = str(REPO_ROOT / PROFILE_DIR / "set_env.sh")
+WPS_RUNTIME_ENV = (
+    f"export LOCAL_MODULES_PATH='{LOCAL_MODULES_PATH}'; "
+    f"export WPS_VERSION='{WPS_VERSION}'; "
+    f"export TOOLCHAIN_SUFFIX='{TOOLCHAIN_SUFFIX}'; "
+    f"source '{ENV_SCRIPT_PATH}'; "
+)
+WRF_RUNTIME_ENV = (
+    f"export LOCAL_MODULES_PATH='{LOCAL_MODULES_PATH}'; "
+    f"export WRF_VERSION='{WRF_VERSION}'; "
+    f"export TOOLCHAIN_SUFFIX='{TOOLCHAIN_SUFFIX}'; "
+    f"source '{ENV_SCRIPT_PATH}'; "
+)
 
 # ERA5 settings
 ERA5_DOMAIN = config["ERA5"]["domain"]
@@ -236,7 +255,7 @@ rule geogrid:
         mpi=MPI_LAUNCHER if int(config["WPS"].get("geogrid", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         cd {params.geo_em_path}
         mkdir -p geogrid
@@ -286,7 +305,7 @@ rule ungrib:
         mem_mb_per_cpu=int(config["WPS"].get("ungrib", {}).get("mem_mb_per_cpu", 10000)),
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         cd {params.run_dir}
 
@@ -324,7 +343,7 @@ rule metgrid:
         mpi=MPI_LAUNCHER if int(config["WPS"].get("metgrid", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
         cd {params.run_dir}
@@ -361,7 +380,7 @@ rule real:
         mpi=MPI_LAUNCHER if int(config["WRF"].get("real", {}).get("tasks", 1)) > 1 else "",
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         echo "Running real for year {params.year} in {params.run_dir}"
         cd {params.run_dir}
@@ -393,7 +412,7 @@ rule wrf:
         mem_mb_per_cpu=int(config["WRF"].get("wrf", {}).get("mem_mb_per_cpu", 2000)),
     shell:
         """
-        source {params.runtime_env}
+        {params.runtime_env}
 
         echo "Running wrf for year {wildcards.year} in {params.run_dir}"
         mkdir -p {params.run_dir}

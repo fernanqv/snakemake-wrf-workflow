@@ -16,8 +16,7 @@ geog_data:
   url: "https://www2.mmm.ucar.edu/wrf/src/wps_files/geog_low_res_mandatory.tar.gz"
 
 execution:
-  runtime_script: "config/profiles/tresmares/set_env.sh"
-  mpi_launcher: "srun"
+  mpi_launcher: "mpirun"  # e.g., mpirun, srun, aprun, etc.
 
 # Resources use one CPU per MPI task; memory is in MB per CPU.
 WPS:
