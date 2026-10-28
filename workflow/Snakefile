@@ -146,6 +146,14 @@ if COMPILATION_ENABLED:
         output:
             wrf_ready = "audit/wrf_link_ready.txt"
 
+    # Local rules for the compilation module
+    localrules: (
+        compilation_audit_wps,
+        compilation_audit_wrf,
+        compilation_link_wps,
+        compilation_link_wrf
+    )
+
     # 4. Fill in the dependencies
     WPS_DEP = [
         "audit/wps_link_ready.txt"
