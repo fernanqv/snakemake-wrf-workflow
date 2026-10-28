@@ -1,34 +1,71 @@
-runs:
-  - 2000
-era5_domain: "EUR"
+runs: [2000, 2001, 2002]
 
-# Use 'repo_root_custom' to point to a location other than the repo's.
+# Resolve relative paths against this directory (defaults to the working directory).
 # repo_root_custom: "/gpfs/projects/meteo/WORK/ASNA/projects/"
-
 run_dir: "run/{year}"
-grib_basedir: "data/ERA5"
-geog_data_path: "data/WPS_GEOG_LOW_RES"
-geo_em_path: "data/geo_em/lowres/{era5_domain}"
 
-namelist_wps: "config/templates/toy_example/namelist.wps"
-namelist_input: "config/templates/toy_example/namelist.input"
+ERA5:
+  domain: "EUR"
+  download_script: "workflow/scripts/ERA5/retrieve_era5_days4_6.py"
+  # Contains a subfolder for each domain, e.g. EUR or SAM.
+  grib_basedir: "data/ERA5"
 
-toolchain_suffix: "-foss-2024a-dmpar"
-eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
+geog_data:
+  download_script: "workflow/scripts/download_wps_geog.sh"
+  path: "data/WPS_GEOG_LOW_RES"
+  url: "https://www2.mmm.ucar.edu/wrf/src/wps_files/geog_low_res_mandatory.tar.gz"
 
-wrf_version: "4.6.1"
-wps_version: "4.6.0"
-wps_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WPS"
-wrf_install_dir: "cordex-core/02_SAM12_evaluation/rundir/WRFv4.6.1-cordex_core"
+execution:
+  mpi_launcher: "mpirun"  # e.g., mpirun, srun, aprun, etc.
 
-Vtable: "Vtable.ERA-interim.pl"
-METGRID.TBL: "METGRID.TBL"
-GEOGRID.TBL: "GEOGRID.TBL.ARW"
-CAMtr_volume_mixing_ratio: "CAMtr_volume_mixing_ratio"
+# Resources use one CPU per MPI task; memory is in MB per CPU.
+WPS:
+  install_dir: "wrf_installation/WPS-4.6.0"
+  namelist_template: "config/templates/toy_example/namelist.wps"
+
+  geogrid:
+    geo_em_path: "data/geo_em/lowres/{era5_domain}"
+    table: "GEOGRID.TBL.ARW"
+    tasks: 2
+    mem_mb_per_cpu: 2000
+
+  ungrib:
+    vtable: "Vtable.ERA-interim.pl"
+    mem_mb_per_cpu: 10000  # Ungrib runs on a single CPU.
+
+  metgrid:
+    table: "METGRID.TBL"
+    tasks: 2
+    mem_mb_per_cpu: 2000
+
+WRF:
+  install_dir: "wrf_installation/WRFV4.6.1"
+  namelist_template: "config/templates/toy_example/namelist.input"
+
+  real:
+    tasks: 4
+    mem_mb_per_cpu: 2000
+
+  wrf:
+    tasks: 16
+    mem_mb_per_cpu: 2000  # 16 tasks request 32000 MB in total.
+
 
 # WRF/WPS compilation
-enable_compilation: true  # enable/disable compilation
+enable_compilation: false  # enable/disable compilation
 compilation_repo: "orviz/snakemake-wrf-wps-compilation"
-compilation_version: "0.5.0"
+compilation_version: "0.6.0"
 compilation_config:
-  compiler: "intel"
+  wrf_version: "4.6.1"
+  wps_version: "4.6.0"
+
+  installation_engine: "easybuild"
+  eessi_init_script: "/cvmfs/software.eessi.io/versions/2025.06/init/bash"
+
+  easybuild:
+    toolchain_name: "foss" # toolchain name (e.g., foss, intel, etc.)
+    toolchain_version: "2024a" # toolchain version (e.g., 2024a, 2023b, etc.)
+    toolchain_type: "dmpar" # toolchain type (e.g., dmpar, serial, etc.)
+
+    wps_subdir: "software/WPS/{wps_version}-{toolchain_name}-{toolchain_version}-{toolchain_type}/WPS-{wps_version}"
+    wrf_subdir: "software/WRF/{wrf_version}-{toolchain_name}-{toolchain_version}-{toolchain_type}/WRFV{wrf_version}"
