@@ -31,8 +31,8 @@ run-rocrate = "snakemake --cores all --workflow-profile ro-crate"
 
 # HPC profiles
 [tasks.hpc-profile]
-args = ["cluster"]
-cmd = "snakemake --profile config/profiles/{{ cluster }}"
+args = ["profile_name"]
+cmd = "snakemake --profile config/profiles/{{ profile_name }} --config profile_name={{ profile_name }}"
 
 [pypi-dependencies]
 jinja2-shell = ">=0.1.4, <0.2"

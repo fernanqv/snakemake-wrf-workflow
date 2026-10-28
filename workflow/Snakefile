@@ -34,9 +34,6 @@ for keys in PATH_KEYS:
         if not path_val.is_absolute():
             section[key] = str(REPO_ROOT / path_val)
 
-# Profile management
-PROFILE_DIR = getattr(workflow.execution_settings, "profile", "config/profiles/local")
-
 # Environment Initialization
 RUN_BASE_DIR_TEMPLATE = config["run_dir"]
 
@@ -51,6 +48,8 @@ WRF_VERSION        = config.get("wrf_version", "4.6.1")
 WPS_VERSION        = config.get("wps_version", "4.6.0")
 TOOLCHAIN_SUFFIX   = config.get("toolchain_suffix", "-foss-2024a-dmpar")
 
+PROFILE_NAME    = config.get("profile_name", "local")
+PROFILE_DIR     = f"config/profiles/{PROFILE_NAME}"
 ENV_SCRIPT_PATH = str(REPO_ROOT / PROFILE_DIR / "set_env.sh")
 WPS_RUNTIME_ENV = (
     f"export LOCAL_MODULES_PATH='{LOCAL_MODULES_PATH}'; "
