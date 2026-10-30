@@ -1,14 +1,14 @@
 &time_control
  start_year                      	= {{start_year}},
- start_month                     	= 11,
- start_day                       	= 4,
+ start_month                     	= {{start_month}},
+ start_day                       	= {{start_day}},
  start_hour                      	= 0,
  start_minute                    	= 0, 
  start_second                    	= 0, 
  end_year                        	= {{end_year}},
- end_month                       	= 11,
- end_day                         	= 4, 
- end_hour                         	= 6,
+ end_month                       	= {{end_month}},
+ end_day                         	= {{end_day}},
+ end_hour                         	= 0,
  end_minute                      	= 0, 
  end_second                      	= 0, 
  interval_seconds                	= 21600,
@@ -16,8 +16,8 @@
  fine_input_stream               	= 2,
  history_interval                	= 60, 
  frames_per_outfile              	= 24, 
- restart                         	= .false.,
- restart_interval                	= 7200,
+ restart                         	= {{restart}},
+ restart_interval                	= 1440,
  override_restart_timers         	= .true.,
  write_hist_at_0h_rst            	= .true.,
  io_form_history                 	= 2,
@@ -47,9 +47,9 @@
  time_step_fract_den              = 1,
  max_dom                         	= 1,
  s_we                            	= 1,
- e_we                            	= 175, ! Adjust to your domain
+ e_we                            	= 61, ! Must match met_em and namelist.wps
  s_sn                            	= 1,    
- e_sn                            	= 165, ! Adjust to your domain
+ e_sn                            	= 61, ! Must match met_em and namelist.wps
  s_vert                          	= 1,
  e_vert                          	= 60,  ! To test - should be increased
  p_top_requested                 	= 2000.,

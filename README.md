@@ -3,7 +3,7 @@
 This repository contains a Snakemake workflow to run a WPS/WRF simulation.
 
 The main workflow is defined in `workflow/Snakefile`. It reads `config/config.yaml`, where
-the run years, ERA5 domain, input/output directories, WPS/WRF installation paths,
+the simulation start date and duration, ERA5 domain, input/output directories, WPS/WRF installation paths,
 template namelists, and table names are configured. The Snakefile uses those
 values to build the WPS and WRF steps: namelist generation, geogrid, ERA5
 download, ungrib, metgrid, real, and wrf.
@@ -16,7 +16,7 @@ The workflow features automated metadata generation for each workflow run levera
 Edit `config/config.yaml` before running the workflow. The most important values
 are:
 
-- `runs`: years to simulate; `run_dir`: per-year directory template.
+- `simulation.start_date` and `simulation.days`: first day of the month and number of consecutive daily runs; `run_dir`: per-day directory template.
 - `ERA5.domain` and `ERA5.grib_basedir`: ERA5 domain and GRIB directory.
 - `geog_data.path` and `geog_data.url`: geographical data directory and download URL.
 - `ERA5.download_script` and `geog_data.download_script`: download scripts, with paths resolved like the other configured paths.
@@ -38,7 +38,7 @@ WRF:
     tasks: 4
     mem_mb_per_cpu: 2000
   wrf:
-    tasks: 16
+    tasks: 4
     mem_mb_per_cpu: 2000
 ```
 
@@ -64,10 +64,21 @@ future integration.
 There are two example configurations in the repository. The current `Snakefile`
 is intended to be used with the `toy_example` templates in
 `config/templates/toy_example/`. This example runs a light WRF simulation over
-only a few days.
+three days (an initial run and two daily restarts) on a 61 × 61 grid at 9 km,
+with 30 vertical levels and a 45-second
+time step. Microphysics, radiation, cumulus parameterization, and pressure-level
+diagnostics are disabled; history is written daily. This configuration is only
+for testing the workflow, not for scientific use. The daily restart output is
+retained because the workflow requires it. Its geographical cache has a separate
+path to avoid reusing files from the previous, larger grid.
 
-The ERA5 helper `workflow/scripts/ERA5/retrieve_era5_days4_6.py` was created for the toy example
-to reduce the workflow runtime by downloading only the required days.
+After changing the grid or vertical levels, regenerate WPS and real outputs and
+start a fresh simulation; old inputs and restarts are incompatible. For a new
+run alongside existing results, override `run_dir`, for example with
+`--config 'run_dir=run/toy_fast/{date}'`.
+
+The ERA5 helper `workflow/scripts/ERA5/retrieve_era5_days1_10.py` retrieves the first ten days
+and day 11 of the configured month; day 11 supplies the 00:00 boundary record for the final run.
 
 ## Workflow Execution
 
@@ -152,14 +163,16 @@ require the workflow environment to be active (for example, via `pixi shell`).
 
 ### Run all simulations through ungrib
 
-Set the simulation years in `config/config.yaml`:
+Set the first day and run length in `config/config.yaml`:
 
 ```yaml
-runs: [2000, 2001, 2002, 2003]
+simulation:
+  start_date: "2000-11-01"
+  days: 10
 ```
 
 Use `--until ungrib` with the default workflow target to run through `ungrib`
-for all configured years, including the required dependencies. Snakemake stops
+for all configured days, including the required dependencies. Snakemake stops
 before the downstream `metgrid`, `real`, and `wrf` steps.
 
 With Pixi:

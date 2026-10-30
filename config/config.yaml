@@ -1,12 +1,14 @@
-runs: [2000, 2001, 2002]
+simulation:
+  start_date: "2000-11-01"
+  days: 3  # Initial run followed by two daily restarts.
 
 # Resolve relative paths against this directory (defaults to the working directory).
 # repo_root_custom: "/gpfs/projects/meteo/WORK/ASNA/projects/"
-run_dir: "run/{year}"
+run_dir: "run/{date}"
 
 ERA5:
   domain: "EUR"
-  download_script: "workflow/scripts/ERA5/retrieve_era5_days4_6.py"
+  download_script: "workflow/scripts/ERA5/retrieve_era5_days1_10.py"
   # Contains a subfolder for each domain, e.g. EUR or SAM.
   grib_basedir: "data/ERA5"
 
@@ -16,7 +18,7 @@ geog_data:
   url: "https://www2.mmm.ucar.edu/wrf/src/wps_files/geog_low_res_mandatory.tar.gz"
 
 execution:
-  mpi_launcher: "mpirun"  # e.g., mpirun, srun, aprun, etc.
+  mpi_launcher: "srun"  # e.g., mpirun, srun, aprun, etc.
 
 # Resources use one CPU per MPI task; memory is in MB per CPU.
 WPS:
@@ -24,7 +26,7 @@ WPS:
   namelist_template: "config/templates/toy_example/namelist.wps"
 
   geogrid:
-    geo_em_path: "data/geo_em/lowres/{era5_domain}"
+    geo_em_path: "data/geo_em/toy_61x61_9km/{era5_domain}"
     table: "GEOGRID.TBL.ARW"
     tasks: 2
     mem_mb_per_cpu: 2000
@@ -47,8 +49,8 @@ WRF:
     mem_mb_per_cpu: 2000
 
   wrf:
-    tasks: 16
-    mem_mb_per_cpu: 2000  # 16 tasks request 32000 MB in total.
+    tasks: 4
+    mem_mb_per_cpu: 2000  # 4 tasks request 8000 MB in total.
 
 
 # WRF/WPS compilation

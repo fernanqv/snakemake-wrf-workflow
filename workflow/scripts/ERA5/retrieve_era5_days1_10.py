@@ -95,9 +95,7 @@ def retrieve_era5(year: str, month: str, source: str, base_dir: str, domain_coor
                 ],
                 "year": [year],
                 "month": [month],
-                "day": [
-                    "04", "05", "06"
-                ],
+                "day": [f"{day:02d}" for day in range(1, 12)],
                 "time": ["00:00", "06:00", "12:00", "18:00"],
                 "pressure_level": [
                         "1", "2", "3",
@@ -151,9 +149,7 @@ def retrieve_era5(year: str, month: str, source: str, base_dir: str, domain_coor
                 ],
                 "year": [year],
                 "month": [month],
-                "day": [
-                    "04", "05", "06",
-                ],
+                "day": [f"{day:02d}" for day in range(1, 12)],
                 "time": ["00:00", "06:00", "12:00", "18:00"],
                 "data_format": "grib",
                 "download_format": "unarchived",

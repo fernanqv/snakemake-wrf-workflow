@@ -8,6 +8,7 @@
 configfile: "config/config.yaml"
 
 import os
+from datetime import date, timedelta
 from pathlib import Path
 from shlex import quote
 
@@ -67,8 +68,15 @@ WRF_RUNTIME_ENV = (
 # ERA5 settings
 ERA5_DOMAIN = config["ERA5"]["domain"]
 GRIB_BASE_DIR = config["ERA5"]["grib_basedir"]
-MONTHS = [f"{month:02d}" for month in range(11, 12)]
 ERA5_FILETYPES = ["pl", "sl"]
+SIM_START = date.fromisoformat(config["simulation"]["start_date"])
+SIM_DAYS = config["simulation"].get("days", 10)
+RUN_DATES = [(SIM_START + timedelta(days=offset)).isoformat()
+             for offset in range(SIM_DAYS)]
+if SIM_START.day != 1:
+    raise ValueError("simulation.start_date must be the first day of a month")
+if not isinstance(SIM_DAYS, int) or not 1 <= SIM_DAYS <= 10:
+    raise ValueError("simulation.days must be an integer between 1 and 10 (ERA5 coverage)")
 
 # GEOGRID
 GEO_EM_PATH = config["WPS"]["geogrid"]["geo_em_path"].format(era5_domain=ERA5_DOMAIN)
@@ -103,13 +111,32 @@ def launch_command(executable, tasks, mpi):
     return f"{mpi} -n {tasks} {executable}"
 
 
-def get_run_dir(year):
-    """Expand run_dir template with domain and year"""
-    return RUN_BASE_DIR_TEMPLATE.format(year=year)
+def get_run_dir(day):
+    """Expand run_dir template with a simulation date."""
+    return RUN_BASE_DIR_TEMPLATE.format(date=day)
+
+
+def day_bounds(day):
+    start = date.fromisoformat(day)
+    end = start + timedelta(days=1)
+    return start, end
+
+
+def restart_path(day):
+    return str(Path(get_run_dir(day)) / "wrf.restart")
+
+
+def restart_filename(day):
+    end = day_bounds(day)[1]
+    return f"wrfrst_d01_{end:%Y-%m-%d}_00:00:00"
+
+
+def previous_day(day):
+    return (date.fromisoformat(day) - timedelta(days=1)).isoformat()
 
 rule all:
     input:
-        [str(Path(get_run_dir(year)) / "wrf.done") for year in config["runs"]]
+        [str(Path(get_run_dir(day)) / "wrf.done") for day in RUN_DATES]
 
 localrules: all, namelist_wps, namelist_wps_geogrid, namelist_input
 
@@ -161,21 +188,23 @@ else:
 # ==============================================================================
 
 
-# Creates the run_dir for each year and generates the namelist.wps file using jinja2 templating.
+# Creates the run_dir for each day and generates the namelist.wps file using jinja2 templating.
 rule namelist_wps:
     output:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "namelist.wps")
     params:
         geog_data_path=str(Path(config["geog_data"]["path"])),
         namelist_wps=config["WPS"]["namelist_template"],
-        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.date),
+        start_date=lambda wildcards: day_bounds(wildcards.date)[0].strftime("%Y-%m-%d_%H:%M:%S"),
+        end_date=lambda wildcards: day_bounds(wildcards.date)[1].strftime("%Y-%m-%d_%H:%M:%S"),
     shell:
         """
         mkdir -p {params.run_dir}
         cd {params.run_dir}
         jinja2 {params.namelist_wps} \
-            -D start_year={wildcards.year} \
-            -D end_year={wildcards.year} \
+            -D start_date={params.start_date} \
+            -D end_date={params.end_date} \
             -D geog_data_path={params.geog_data_path} \
             -o namelist.wps
         """
@@ -188,11 +217,15 @@ rule namelist_wps_geogrid:
         geog_data_path=str(Path(config["geog_data"]["path"])),
         geo_em_path=GEO_EM_PATH,
         namelist_wps=config["WPS"]["namelist_template"],
+        start_date=SIM_START.strftime("%Y-%m-%d_00:00:00"),
+        end_date=(SIM_START + timedelta(days=SIM_DAYS)).strftime("%Y-%m-%d_00:00:00"),
     shell:
         """
         mkdir -p {params.geo_em_path}
         cd {params.geo_em_path}
         jinja2 {params.namelist_wps} \
+            -D start_date={params.start_date} \
+            -D end_date={params.end_date} \
             -D geog_data_path={params.geog_data_path} \
             -o namelist.wps
         """
@@ -201,15 +234,27 @@ rule namelist_input:
     output:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "namelist.input")
     params:
-        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.date),
         namelist_input_template=str(Path(config["WRF"]["namelist_template"])),
+        start_year=lambda wildcards: day_bounds(wildcards.date)[0].year,
+        start_month=lambda wildcards: day_bounds(wildcards.date)[0].month,
+        start_day=lambda wildcards: day_bounds(wildcards.date)[0].day,
+        end_year=lambda wildcards: day_bounds(wildcards.date)[1].year,
+        end_month=lambda wildcards: day_bounds(wildcards.date)[1].month,
+        end_day=lambda wildcards: day_bounds(wildcards.date)[1].day,
+        restart=lambda wildcards: ".true." if wildcards.date != RUN_DATES[0] else ".false.",
     shell:
         """
         mkdir -p {params.run_dir}
         cd {params.run_dir}
         jinja2 {params.namelist_input_template} \
-            -D start_year={wildcards.year} \
-            -D end_year={wildcards.year} \
+            -D start_year={params.start_year} \
+            -D start_month={params.start_month} \
+            -D start_day={params.start_day} \
+            -D end_year={params.end_year} \
+            -D end_month={params.end_month} \
+            -D end_day={params.end_day} \
+            -D restart={params.restart} \
             -o namelist.input
         """
 
@@ -284,17 +329,16 @@ rule ungrib:
     input:
         gribs=lambda wildcards: expand(
             f"{GRIB_BASE_DIR}/{ERA5_DOMAIN}/{{year}}/ERA5-{{year}}{{month}}-{{filetype}}.grib",
-            year=wildcards.year,
-            month=MONTHS,
+            year=SIM_START.year,
+            month=[f"{SIM_START.month:02d}"],
             filetype=ERA5_FILETYPES,
         ),
-        namelist_wps=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "namelist.wps"),
+        namelist_wps=lambda wildcards: str(Path(get_run_dir(wildcards.date)) / "namelist.wps"),
         compilation=WPS_DEP
     output:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "ungrib.done")
     params:
-        grib_dir=lambda wildcards: str(Path(GRIB_BASE_DIR) / ERA5_DOMAIN / wildcards.year),
-        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.date),
         VTable=VTABLE,
         wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
@@ -309,7 +353,7 @@ rule ungrib:
         cd {params.run_dir}
 
         # Link GRIB files
-        csh {params.wps_install_dir}/link_grib.csh {params.grib_dir}/*.grib
+        csh {params.wps_install_dir}/link_grib.csh {input.gribs}
 
         # Link Vtable
         ln -sf {params.wps_install_dir}/ungrib/Variable_Tables/{params.VTable} Vtable
@@ -321,14 +365,14 @@ rule ungrib:
 
 rule metgrid:
     input:
-        ungrib=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "ungrib.done"),
+        ungrib=lambda wildcards: str(Path(get_run_dir(wildcards.date)) / "ungrib.done"),
         geogrid_done=str(Path(GEO_EM_PATH) / "geogrid.done"),
         geogrid_nc=str(Path(GEO_EM_PATH) / "geo_em.d01.nc"),
         compilation=WPS_DEP
     output:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "metgrid.done")
     params:
-        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.date),
         METGRID_TBL=METGRID_TBL,
         wps_install_dir=WPS_INSTALL_DIR,
         runtime_env=WPS_RUNTIME_ENV,
@@ -344,7 +388,7 @@ rule metgrid:
         """
         {params.runtime_env}
 
-        echo "Running metgrid for year {wildcards.year} in {params.run_dir}"
+        echo "Running metgrid for date {wildcards.date} in {params.run_dir}"
         cd {params.run_dir}
         mkdir -p metgrid
 
@@ -359,14 +403,14 @@ rule metgrid:
 
 rule real:
     input:
-        metgrid=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "metgrid.done"),
-        namelist_input=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "namelist.input"),
+        metgrid=lambda wildcards: str(Path(get_run_dir(wildcards.date)) / "metgrid.done"),
+        namelist_input=lambda wildcards: str(Path(get_run_dir(wildcards.date)) / "namelist.input"),
         compilation=WRF_DEP
     output:
         str(Path(RUN_BASE_DIR_TEMPLATE) / "real.done")
     params:
-        year=lambda wildcards: wildcards.year,
-        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        date=lambda wildcards: wildcards.date,
+        run_dir=lambda wildcards: get_run_dir(wildcards.date),
         wrf_install_dir=WRF_INSTALL_DIR,
         runtime_env=WRF_RUNTIME_ENV,
         command=lambda wildcards, resources: launch_command(
@@ -381,7 +425,7 @@ rule real:
         """
         {params.runtime_env}
 
-        echo "Running real for year {params.year} in {params.run_dir}"
+        echo "Running real for date {params.date} in {params.run_dir}"
         cd {params.run_dir}
 
         {params.command}
@@ -391,12 +435,28 @@ rule real:
 
 rule wrf:
     input:
-        real=lambda wildcards: str(Path(get_run_dir(wildcards.year)) / "real.done"),
+        real=lambda wildcards: str(Path(get_run_dir(wildcards.date)) / "real.done"),
+        previous_done=lambda wildcards: (
+            str(Path(get_run_dir(previous_day(wildcards.date))) / "wrf.done")
+            if wildcards.date != RUN_DATES[0] else []
+        ),
+        restart=lambda wildcards: (
+            restart_path(previous_day(wildcards.date))
+            if wildcards.date != RUN_DATES[0] else []
+        ),
         compilation=WRF_DEP
     output:
-        str(Path(RUN_BASE_DIR_TEMPLATE) / "wrf.done")
+        done=str(Path(RUN_BASE_DIR_TEMPLATE) / "wrf.done"),
+        restart=str(Path(RUN_BASE_DIR_TEMPLATE) / "wrf.restart")
     params:
-        run_dir=lambda wildcards: get_run_dir(wildcards.year),
+        run_dir=lambda wildcards: get_run_dir(wildcards.date),
+        is_restart=lambda wildcards: wildcards.date != RUN_DATES[0],
+        restart_name=lambda wildcards: restart_filename(wildcards.date),
+        incoming_restart_name=lambda wildcards: f"wrfrst_d01_{wildcards.date}_00:00:00",
+        restart_source=lambda wildcards: (
+            restart_path(previous_day(wildcards.date))
+            if wildcards.date != RUN_DATES[0] else ""
+        ),
         wrf_run_dir=str(Path(WRF_INSTALL_DIR) / "run"),
         wrf_run_find_excludes=WRF_RUN_FIND_EXCLUDES,
         wrf_install_dir=WRF_INSTALL_DIR,
@@ -413,7 +473,7 @@ rule wrf:
         """
         {params.runtime_env}
 
-        echo "Running wrf for year {wildcards.year} in {params.run_dir}"
+        echo "Running wrf for date {wildcards.date} in {params.run_dir}"
         mkdir -p {params.run_dir}
         cd {params.run_dir}
 
@@ -422,7 +482,13 @@ rule wrf:
             -exec ln -sf {{}} . \\;
 
         echo "Running wrf with {resources.tasks} task(s)"
+        if [ "{params.is_restart}" = "True" ]; then
+            ln -sf {params.restart_source:q} {params.incoming_restart_name:q}
+        fi
         {params.command}
 
-        touch {output}
+        test -s {params.restart_name:q}
+        ln -sf {params.restart_name:q} {output.restart:q}
+        test -s {output.restart:q}
+        touch {output.done}
         """
