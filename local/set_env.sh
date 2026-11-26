@@ -6,7 +6,7 @@ set +u
 # Default runtime settings injected by Snakemake: DO NOT MODIFY #
 # ------------------------------------------------------------- #
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)" # hack
+REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 
 LOCAL_MODULES_PATH="${LOCAL_MODULES_PATH:-${REPO_ROOT}/.easybuild/modules/all}"
 WRF_VERSION="${WRF_VERSION:-4.6.1}"
