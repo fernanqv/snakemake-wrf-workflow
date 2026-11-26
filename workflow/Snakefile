@@ -52,12 +52,14 @@ PROFILE_NAME    = config.get("profile_name", "local")
 PROFILE_DIR     = f"config/profiles/{PROFILE_NAME}"
 ENV_SCRIPT_PATH = str(REPO_ROOT / PROFILE_DIR / "set_env.sh")
 WPS_RUNTIME_ENV = (
+    f"export REPO_ROOT='{REPO_ROOT}'; "
     f"export LOCAL_MODULES_PATH='{LOCAL_MODULES_PATH}'; "
     f"export WPS_VERSION='{WPS_VERSION}'; "
     f"export TOOLCHAIN_SUFFIX='{TOOLCHAIN_SUFFIX}'; "
     f"source '{ENV_SCRIPT_PATH}'; "
 )
 WRF_RUNTIME_ENV = (
+    f"export REPO_ROOT='{REPO_ROOT}'; "
     f"export LOCAL_MODULES_PATH='{LOCAL_MODULES_PATH}'; "
     f"export WRF_VERSION='{WRF_VERSION}'; "
     f"export TOOLCHAIN_SUFFIX='{TOOLCHAIN_SUFFIX}'; "
